@@ -12,7 +12,7 @@ class Peer:
         pass
 
     def to_tuple(self):
-        return str(self.ipv4), self.port
+        return str(self.ipv6), self.port
 
     def __str__(self):
         return f'<Peer {self.ipv4 or self.ipv6}, port:{self.port}>'

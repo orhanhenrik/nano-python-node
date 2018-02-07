@@ -11,9 +11,17 @@ class BlockType(IntEnum):
 
 
 class Block:
-    @classmethod
-    def parse(cls, data):
-        block_type = BlockType(data[0])
+    def __init__(self, block_type):
+        self.block_type = block_type
+
+    def to_bytes(self):
+        return bytes([self.block_type.value])
+
+
+class BlockParser:
+    @staticmethod
+    def parse(data: bytes) -> Block:
+        block_type: BlockType = BlockType(data[0])
         if block_type == BlockType.SEND:
             pass
         elif block_type == BlockType.RECEIVE:
@@ -25,10 +33,4 @@ class Block:
         else:
             pass
 
-        return cls(block_type)
-
-    def __init__(self, block_type):
-        self.block_type = block_type
-
-    def to_bytes(self):
-        return bytes([self.block_type.value])
+        return Block(block_type)

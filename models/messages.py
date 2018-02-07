@@ -21,7 +21,7 @@ class MessageType(IntEnum):
 
 class Header:
     @classmethod
-    def parse(cls, data):
+    def parse(cls, data: bytes):
         greeting = data[0:2]
         version_max = data[2]
         version_current = data[3]
@@ -46,16 +46,29 @@ class Header:
         return self.greeting + bytes([self.version_max, self.version_current, self.version_min, self.message_type.value, self.extensions])
 
 
+class Message:
+    @classmethod
+    def parse(cls, header: Header, block_type: BlockType, data: bytes):
+        pass
+
+    def __init__(self, header: Header, block_type: BlockType, message_type: MessageType):
+        self.header = header
+        self.block_type = block_type
+        self.message_type = message_type
+
+    def to_bytes(self):
+        return self.header.to_bytes() + bytes([self.block_type.value])
+
 
 class MessageParser:
     @staticmethod
-    def parse_message(data):
+    def parse(data: bytes) -> Message:
         # print('parsing message..')
         if len(data) < 8:
             pass  # raise
 
-        header = Header.parse(data[:7])
-        block_type = BlockType(data[7])
+        header: Header = Header.parse(data[:7])
+        block_type: BlockType = BlockType(data[7])
 
         if header.message_type == MessageType.KEEPALIVE:
             return KeepAliveMessage.parse(header, block_type, data[8:])
@@ -66,20 +79,7 @@ class MessageParser:
         elif header.message_type == MessageType.CONFIRM_ACK:
             pass
 
-        return Message(header, block_type)
-
-
-class Message:
-    @classmethod
-    def parse(cls, header: Header, block_type: BlockType, data: bytes):
-        pass
-
-    def __init__(self, header: Header, block_type: BlockType):
-        self.header = header
-        self.block_type = block_type
-
-    def to_bytes(self):
-        return self.header.to_bytes() + bytes([self.block_type.value])
+        return Message(header, block_type, header.message_type)
 
 
 class KeepAliveMessage(Message):
@@ -98,11 +98,33 @@ class KeepAliveMessage(Message):
         if peers is None:
             peers = []
 
-        super(KeepAliveMessage, self).__init__(header, block_type)
+        super(KeepAliveMessage, self).__init__(header, block_type, MessageType.KEEPALIVE)
 
         self.peers = peers
 
     def to_bytes(self):
+        # TODO: Add peers
         return super(KeepAliveMessage, self).to_bytes()
 
 
+class PublishMessage(Message):
+    @classmethod
+    def parse(cls, header: Header, block_type: BlockType, data: bytes):
+        block: Block = BlockParser.parse()
+        peers: List[Peer] = []
+        for i in range(0, len(data), 18):
+            ip = data[i:i+18]
+            peers.append(Peer(ip))
+        # print(peers)
+        return cls(header, block_type, peers)
+
+    def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID, block: Block = None):
+        if header is None:
+            header = Header.default_header()
+        super(PublishMessage, self).__init__(header, block_type, MessageType.PUBLISH)
+        self.block = block
+
+
+    def to_bytes(self):
+        # TODO: Add peers
+        return super(PublishMessage, self).to_bytes() + self.block.to_bytes()

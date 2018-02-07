@@ -1,16 +1,18 @@
 import asyncio
 
 import uvloop
+from uvloop.loop import UDPTransport
 
 from models.messages import Message, MessageType, MessageParser, KeepAliveMessage
+from type_definitions import Address
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
-async def handle_msg(data, addr, transport):
-    #await asyncio.sleep(2)
+async def handle_msg(data: bytes, addr: Address, transport: UDPTransport):
+    print(addr)
 
-    message: Message = MessageParser.parse_message(data)
+    message: Message = MessageParser.parse(data)
     print(message.header.message_type)
 
     if isinstance(message, KeepAliveMessage):
@@ -20,8 +22,7 @@ async def handle_msg(data, addr, transport):
         keepalive_response = KeepAliveMessage().to_bytes()
         transport.sendto(keepalive_response, addr)
 
-        first_peer = next(filter(lambda p: p.ipv4 is not None, message.peers))
-        if first_peer:
+        if message.peers[0]:
             print(f'constructing keepalive for first peer {message.peers[0]}')
             transport.sendto(keepalive_response, message.peers[0].to_tuple())
         else:
@@ -32,10 +33,10 @@ async def handle_msg(data, addr, transport):
 
 class EchoServerProtocol(asyncio.DatagramProtocol):
 
-    def connection_made(self, transport):
+    def connection_made(self, transport: UDPTransport):
         self.transport = transport
 
-    def datagram_received(self, data, addr):
+    def datagram_received(self, data: bytes, addr: Address):
         print(f'received {len(data)} bytes from {addr}')
         asyncio.ensure_future(handle_msg(data, addr, transport))
 
@@ -44,8 +45,7 @@ loop = asyncio.get_event_loop()
 print('starting UDP server')
 
 listen = loop.create_datagram_endpoint(
-    #EchoServerProtocol, local_addr=('127.0.0.1', 8888)
-    EchoServerProtocol, local_addr=('0.0.0.0', 8888)
+    EchoServerProtocol, local_addr=('::', 8888)
 )
 
 transport, protocol = loop.run_until_complete(listen)
