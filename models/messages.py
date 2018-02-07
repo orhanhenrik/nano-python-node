@@ -103,6 +103,49 @@ class PublishMessage(Message):
         return super(PublishMessage, self).to_bytes() + self.block.to_bytes()
 
 
+class ReqMessage(Message):
+    @classmethod
+    def parse(cls, header: Header, block_type: BlockType, data: bytes):
+        block: Block = BlockParser.parse(block_type, data)
+        return cls(header, block_type, block)
+
+    def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID, block: Block = None):
+        if header is None:
+            header = Header.default_header()
+        super(ReqMessage, self).__init__(header, block_type, MessageType.CONFIRM_REQ)
+        self.block = block
+        print(self.block)
+        print(type(self.block))
+
+    def to_bytes(self):
+        return super(ReqMessage, self).to_bytes() + self.block.to_bytes()
+
+
+class AckMessage(Message):
+    @classmethod
+    def parse(cls, header: Header, block_type: BlockType, data: bytes):
+        # TODO: Create Vote class
+        vote = dict(
+            account=data[0:32],
+            signature=data[32:96],
+            sequence=data[96:104]
+        )
+        block: Block = BlockParser.parse(block_type, data[104:])
+        return cls(header, block_type, vote, block)
+
+    def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID, vote = None, block: Block = None):
+        if header is None:
+            header = Header.default_header()
+        super(AckMessage, self).__init__(header, block_type, MessageType.CONFIRM_ACK)
+        self.vote = vote
+        print(self.vote)
+        self.block = block
+        print(type(self.block))
+
+    def to_bytes(self):
+        return super(AckMessage, self).to_bytes() + self.block.to_bytes()
+
+
 class MessageParser:
     @staticmethod
     def parse(data: bytes) -> Message:
@@ -118,8 +161,8 @@ class MessageParser:
         elif header.message_type == MessageType.PUBLISH:
             return PublishMessage.parse(header, block_type, data[8:])
         elif header.message_type == MessageType.CONFIRM_REQ:
-            pass
+            return ReqMessage.parse(header, block_type, data[8:])
         elif header.message_type == MessageType.CONFIRM_ACK:
-            pass
+            return AckMessage.parse(header, block_type, data[8:])
 
         return Message(header, block_type, header.message_type)
