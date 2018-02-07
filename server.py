@@ -10,7 +10,6 @@ asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
 async def handle_msg(data: bytes, addr: Address, transport: UDPTransport):
-    print(addr)
 
     message: Message = MessageParser.parse(data)
     print(message.header.message_type)
@@ -37,7 +36,7 @@ class EchoServerProtocol(asyncio.DatagramProtocol):
         self.transport = transport
 
     def datagram_received(self, data: bytes, addr: Address):
-        print(f'received {len(data)} bytes from {addr}')
+        print(f'## Received {len(data)} bytes from {addr}')
         asyncio.ensure_future(handle_msg(data, addr, transport))
 
 

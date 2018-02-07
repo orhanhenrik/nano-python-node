@@ -1,7 +1,7 @@
 from enum import IntEnum
 from typing import List
 
-from models.block import Block, BlockType
+from models.block import Block, BlockType, BlockParser
 from models.peer import Peer
 
 
@@ -60,28 +60,6 @@ class Message:
         return self.header.to_bytes() + bytes([self.block_type.value])
 
 
-class MessageParser:
-    @staticmethod
-    def parse(data: bytes) -> Message:
-        # print('parsing message..')
-        if len(data) < 8:
-            pass  # raise
-
-        header: Header = Header.parse(data[:7])
-        block_type: BlockType = BlockType(data[7])
-
-        if header.message_type == MessageType.KEEPALIVE:
-            return KeepAliveMessage.parse(header, block_type, data[8:])
-        elif header.message_type == MessageType.PUBLISH:
-            pass
-        elif header.message_type == MessageType.CONFIRM_REQ:
-            pass
-        elif header.message_type == MessageType.CONFIRM_ACK:
-            pass
-
-        return Message(header, block_type, header.message_type)
-
-
 class KeepAliveMessage(Message):
     @classmethod
     def parse(cls, header: Header, block_type: BlockType, data: bytes):
@@ -110,21 +88,38 @@ class KeepAliveMessage(Message):
 class PublishMessage(Message):
     @classmethod
     def parse(cls, header: Header, block_type: BlockType, data: bytes):
-        block: Block = BlockParser.parse()
-        peers: List[Peer] = []
-        for i in range(0, len(data), 18):
-            ip = data[i:i+18]
-            peers.append(Peer(ip))
-        # print(peers)
-        return cls(header, block_type, peers)
+        block: Block = BlockParser.parse(block_type, data)
+        return cls(header, block_type, block)
 
     def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID, block: Block = None):
         if header is None:
             header = Header.default_header()
         super(PublishMessage, self).__init__(header, block_type, MessageType.PUBLISH)
         self.block = block
-
+        print(self.block)
+        print(type(self.block))
 
     def to_bytes(self):
-        # TODO: Add peers
         return super(PublishMessage, self).to_bytes() + self.block.to_bytes()
+
+
+class MessageParser:
+    @staticmethod
+    def parse(data: bytes) -> Message:
+        # print('parsing message..')
+        if len(data) < 8:
+            pass  # raise
+
+        header: Header = Header.parse(data[:7])
+        block_type: BlockType = BlockType(data[7])
+
+        if header.message_type == MessageType.KEEPALIVE:
+            return KeepAliveMessage.parse(header, block_type, data[8:])
+        elif header.message_type == MessageType.PUBLISH:
+            return PublishMessage.parse(header, block_type, data[8:])
+        elif header.message_type == MessageType.CONFIRM_REQ:
+            pass
+        elif header.message_type == MessageType.CONFIRM_ACK:
+            pass
+
+        return Message(header, block_type, header.message_type)
