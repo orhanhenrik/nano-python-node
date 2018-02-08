@@ -38,7 +38,10 @@ async def handle_msg(data: bytes, addr: Address, transport: UDPTransport):
     print('done')
 
 
-class EchoServerProtocol(asyncio.DatagramProtocol):
+class UDPServerProtocol(asyncio.DatagramProtocol):
+
+    def __init__(self):
+        self.transport = None
 
     def connection_made(self, transport: UDPTransport):
         self.transport = transport
@@ -48,14 +51,45 @@ class EchoServerProtocol(asyncio.DatagramProtocol):
         asyncio.ensure_future(handle_msg(data, addr, transport))
 
 
-loop = asyncio.get_event_loop()
-print('starting UDP server')
+class TCPServerProtocol(asyncio.Protocol):
+    def __init__(self):
+        print('init')
+        self.transport = None
 
-listen = loop.create_datagram_endpoint(
-    EchoServerProtocol, local_addr=('::', 8888)
+    def connection_made(self, transport):
+        self.transport = transport
+        print('connection made')
+
+    def data_received(self, data):
+        print('tcp data received', data)
+
+
+loop = asyncio.get_event_loop()
+
+tcp_coro = loop.create_server(TCPServerProtocol, '::', 8888)
+
+udp_coro = loop.create_datagram_endpoint(
+    UDPServerProtocol, local_addr=('::', 8888)
 )
 
-transport, protocol = loop.run_until_complete(listen)
+print('starting TCP server')
+server = loop.run_until_complete(tcp_coro)
+print(server)
+print('starting UDP server')
+transport, protocol = loop.run_until_complete(udp_coro)
+
+
+async def boot():
+    import socket
+    ipv4 = socket.gethostbyname(socket.gethostname())
+    ipv6 = f'::ffff:{ipv4}'
+    # print(f'sending keepalive to {ipv6}')
+    # transport.sendto(KeepAliveMessage().to_bytes(), (ipv6, 7075, 0, 0))
+
+asyncio.ensure_future(boot(), loop=loop)
+
+
+
 
 try:
     loop.run_forever()
