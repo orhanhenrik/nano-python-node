@@ -17,6 +17,7 @@ async def handle_msg(data: bytes, addr: Address, transport: UDPTransport):
     if message.block:
         if not message.block.verify():
             print('INVALID BLOCK!!')
+            raise Exception('INVALID BLOCK')
         else:
             print('Block valid')
 

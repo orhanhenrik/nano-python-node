@@ -4,19 +4,17 @@ from ed25519 import VerifyingKey, BadSignatureError
 
 
 def verify_pow(data, work):
-    #print(data)
-    #print(work)
-    h = blake2b(digest_size=8)
-    h.update(work)
-    h.update(data)
-    digest = h.digest()
-    #print(digest.hex())
-    #print('ffffffc000000000')
-    return digest < bytes.fromhex('ffffffc000000000')
+    # h = blake2b(digest_size=8)
+    # h.update(work)
+    # h.update(data)
+    # digest = h.digest()[::-1]
+    digest = blake2b_hash(work, data, digest_size=8)[::-1]
+    return digest >= bytes.fromhex('ffffffc000000000')
 
 
 def verify_signature(hash, signature, public_key):
-    print('verifying')
+    print('verifying - not implemented')
+    return True
     print('hash', len(hash), hash.hex())
     print('signature', len(signature), signature.hex())
     print('public_key', len(public_key), public_key.hex())
@@ -27,7 +25,6 @@ def verify_signature(hash, signature, public_key):
         print("signature is valid!")
     except BadSignatureError:
         print("bad signature :(")
-    # ed25519 signature check
     return True
 
 
