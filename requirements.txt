@@ -1,3 +1,4 @@
+ed25519==1.4
 ipaddr==2.2.0
 python-rocksdb==0.6.8
 uvloop==0.9.1

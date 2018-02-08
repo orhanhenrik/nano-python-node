@@ -14,6 +14,12 @@ async def handle_msg(data: bytes, addr: Address, transport: UDPTransport):
     message: Message = MessageParser.parse(data)
     print(message.header.message_type)
 
+    if message.block:
+        if not message.block.verify():
+            print('INVALID BLOCK!!')
+        else:
+            print('Block valid')
+
     if isinstance(message, KeepAliveMessage):
         print('peers..')
         print(message.peers)
@@ -21,11 +27,12 @@ async def handle_msg(data: bytes, addr: Address, transport: UDPTransport):
         keepalive_response = KeepAliveMessage().to_bytes()
         transport.sendto(keepalive_response, addr)
 
-        if message.peers[0]:
+        EXPAND_PEERS = False
+        if EXPAND_PEERS and len(message.peers):
             print(f'constructing keepalive for first peer {message.peers[0]}')
             transport.sendto(keepalive_response, message.peers[0].to_tuple())
         else:
-            print('found no peers with ipv4 addresses')
+            print('found no valid peers')
 
     print('done')
 

@@ -54,6 +54,7 @@ class Message:
     def __init__(self, header: Header, block_type: BlockType, message_type: MessageType):
         self.header = header
         self.block_type = block_type
+        self.block = None
         self.message_type = message_type
 
     def to_bytes(self):
@@ -96,8 +97,6 @@ class PublishMessage(Message):
             header = Header.default_header()
         super(PublishMessage, self).__init__(header, block_type, MessageType.PUBLISH)
         self.block = block
-        print(self.block)
-        print(type(self.block))
 
     def to_bytes(self):
         return super(PublishMessage, self).to_bytes() + self.block.to_bytes()
@@ -114,8 +113,6 @@ class ReqMessage(Message):
             header = Header.default_header()
         super(ReqMessage, self).__init__(header, block_type, MessageType.CONFIRM_REQ)
         self.block = block
-        print(self.block)
-        print(type(self.block))
 
     def to_bytes(self):
         return super(ReqMessage, self).to_bytes() + self.block.to_bytes()
@@ -138,9 +135,7 @@ class AckMessage(Message):
             header = Header.default_header()
         super(AckMessage, self).__init__(header, block_type, MessageType.CONFIRM_ACK)
         self.vote = vote
-        print(self.vote)
         self.block = block
-        print(type(self.block))
 
     def to_bytes(self):
         return super(AckMessage, self).to_bytes() + self.block.to_bytes()

@@ -1,5 +1,7 @@
 from enum import IntEnum
 
+from util.crypto import verify_pow, verify_signature, blake2b_hash
+
 
 class BlockType(IntEnum):
     INVALID = 0
@@ -16,7 +18,34 @@ class Block:
         pass
 
     def __init__(self, block_type):
+        self.work = None
+        self.signature = None
         self.block_type = block_type
+
+    @property
+    def pow_hash_source(self):
+        return None
+
+    @property
+    def hash(self):
+        return None
+
+    def verify(self):
+        return self.verify_signature() and self.verify_pow() and self.verify_consistency()
+
+    def verify_pow(self):
+        return verify_pow(self.pow_hash_source, self.work)
+
+    def verify_signature(self):
+        if self.hash and isinstance(self, OpenBlock):
+            print(self.block_type)
+            print(self.hash.hex())
+            print(verify_signature(self.hash, self.signature, self.account))
+        return True
+        return verify_signature(self.hash, self.signature, self.account)
+
+    def verify_consistency(self):
+        return True
 
     def to_bytes(self):
         return bytes([self.block_type.value])
@@ -46,6 +75,14 @@ class SendBlock(Block):
         self.signature = signature
         self.work = work
 
+    @property
+    def pow_hash_source(self):
+        return self.previous
+
+    @property
+    def hash(self):
+        return blake2b_hash(self.previous, self.destination, self.balance)
+
 
 class ReceiveBlock(Block):
     @classmethod
@@ -62,6 +99,14 @@ class ReceiveBlock(Block):
         self.source = source
         self.signature = signature
         self.work = work
+
+    @property
+    def pow_hash_source(self):
+        return self.previous
+
+    @property
+    def hash(self):
+        return blake2b_hash(self.previous, self.source)
 
 
 class OpenBlock(Block):
@@ -83,6 +128,14 @@ class OpenBlock(Block):
         self.signature = signature
         self.work = work
 
+    @property
+    def pow_hash_source(self):
+        return self.account
+
+    @property
+    def hash(self):
+        return blake2b_hash(self.source, self.representative, self.account)
+
 
 class ChangeBlock(Block):
     @classmethod
@@ -99,6 +152,14 @@ class ChangeBlock(Block):
         self.representative = representative
         self.signature = signature
         self.work = work
+
+    @property
+    def pow_hash_source(self):
+        return self.previous
+
+    @property
+    def hash(self):
+        return blake2b_hash(self.previous, self.representative)
 
 
 class BlockParser:
