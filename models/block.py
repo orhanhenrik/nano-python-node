@@ -1,6 +1,7 @@
+import asyncio
 from enum import IntEnum
 
-from util.crypto import verify_pow, verify_signature, blake2b_hash
+from util.crypto import verify_pow, verify_signature, blake2b_hash, blake2b_async, verify_pow_async
 
 
 class BlockType(IntEnum):
@@ -17,30 +18,30 @@ class Block:
     def parse(cls, data: bytes):
         pass
 
-    def __init__(self, block_type):
-        self.work = None
-        self.signature = None
-        self.block_type = block_type
+    def __init__(self, block_type: BlockType):
+        self.work: bytes = bytes()
+        self.signature: bytes = bytes()
+        self.block_type: BlockType = block_type
 
     @property
-    def root(self):
-        return None
+    def root(self) -> bytes:
+        return bytes()
 
-    @property
-    def hash(self):
-        return None
+    async def hash(self):
+        return bytes()
 
-    def verify(self):
-        return self.verify_signature() and self.verify_pow() and self.verify_consistency()
+    async def verify(self):
+        return await self.verify_signature() and await self.verify_pow() and self.verify_consistency()
 
-    def verify_pow(self):
-        return verify_pow(self.root, self.work)
+    async def verify_pow(self):
+        return await verify_pow_async(self.root, self.work)
 
-    def verify_signature(self):
-        if self.hash and isinstance(self, OpenBlock):
+    async def verify_signature(self):
+        _hash = await self.hash()
+        if hash and isinstance(self, OpenBlock):
             print(self.block_type)
-            print(self.hash.hex())
-            print(verify_signature(self.hash, self.signature, self.account))
+            print(_hash.hex())
+            print(verify_signature(_hash, self.signature, self.account))
         return True
 
     def verify_consistency(self):
@@ -50,13 +51,13 @@ class Block:
         # And more?
         return True
 
-    def to_bytes(self):
+    def to_bytes(self) -> bytes:
         return bytes([self.block_type.value])
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f'<Block {self.block_type.name}>'
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self)
 
 
@@ -82,9 +83,8 @@ class SendBlock(Block):
     def root(self):
         return self.previous
 
-    @property
-    def hash(self):
-        return blake2b_hash(self.previous, self.destination, self.balance)
+    async def hash(self):
+        return await blake2b_async(self.previous + self.destination + self.balance)
 
 
 class ReceiveBlock(Block):
@@ -107,9 +107,8 @@ class ReceiveBlock(Block):
     def root(self):
         return self.previous
 
-    @property
-    def hash(self):
-        return blake2b_hash(self.previous, self.source)
+    async def hash(self):
+        return await blake2b_async(self.previous + self.source)
 
 
 class OpenBlock(Block):
@@ -135,9 +134,8 @@ class OpenBlock(Block):
     def root(self):
         return self.account
 
-    @property
-    def hash(self):
-        return blake2b_hash(self.source, self.representative, self.account)
+    async def hash(self):
+        return await blake2b_async(self.source + self.representative + self.account)
 
 
 class ChangeBlock(Block):
@@ -160,9 +158,8 @@ class ChangeBlock(Block):
     def root(self):
         return self.previous
 
-    @property
-    def hash(self):
-        return blake2b_hash(self.previous, self.representative)
+    async def hash(self):
+        return await blake2b_async(self.previous + self.representative)
 
 
 class BlockParser:
@@ -180,3 +177,4 @@ class BlockParser:
             pass
 
         return Block(block_type)
+

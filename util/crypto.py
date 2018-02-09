@@ -1,20 +1,28 @@
+import asyncio
 from hashlib import blake2b
 
 from ed25519 import VerifyingKey, BadSignatureError
 
+#from executors import thread_executor
 
-def verify_pow(data, work):
+
+def verify_pow(data: bytes, work: bytes):
     # h = blake2b(digest_size=8)
     # h.update(work)
     # h.update(data)
     # digest = h.digest()[::-1]
-    digest = blake2b_hash(work, data, digest_size=8)[::-1]
+    digest = blake2b_hash(work + data, digest_size=8)[::-1]
     return digest >= bytes.fromhex('ffffffc000000000')
 
 
-def verify_signature(hash, signature, public_key):
-    print('verifying - not implemented')
-    return True
+async def verify_pow_async(data: bytes, work: bytes):
+    _loop = asyncio.get_event_loop()
+    return await _loop.run_in_executor(thread_executor, verify_pow, data, work)
+
+
+def verify_signature(hash: bytes, signature: bytes, public_key: bytes):
+#    print('verifying - not implemented')
+#    return True
     print('hash', len(hash), hash.hex())
     print('signature', len(signature), signature.hex())
     print('public_key', len(public_key), public_key.hex())
@@ -28,12 +36,14 @@ def verify_signature(hash, signature, public_key):
     return True
 
 
-def blake2b_hash(*values, digest_size=32):
-    h = blake2b(digest_size=digest_size)
-    for val in values:
-        h.update(val)
+def blake2b_hash(value: bytes, digest_size: int = 32):
+    h = blake2b(value, digest_size=digest_size)
     return h.digest()
 
+
+async def blake2b_async(value: bytes, digest_size: int = 32):
+    _loop = asyncio.get_event_loop()
+    return await _loop.run_in_executor(thread_executor, blake2b_hash, value)
 
 if __name__ == '__main__':
     hash = b'U\x00\x95\xad\xd6\xd70\xa9D\x02\xc9\xd2BF\xae\x14\x19\xf5\xd8\n\xa3{8\x99\xfd[\xa5c}\xd0\xc7~'
