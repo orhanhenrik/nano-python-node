@@ -7,7 +7,7 @@ import time
 import uvloop
 from uvloop.loop import UDPTransport, Loop, Server
 
-from blake2 import try_hash
+# from blake2 import try_hash
 from executors import process_executor, thread_executor
 from models.messages import Message, MessageType, MessageParser, KeepAliveMessage
 from type_definitions import Address
@@ -21,12 +21,19 @@ async def handle_msg(data: bytes, addr: Address, transport: UDPTransport):
     message: Message = MessageParser.parse(data)
     print(message.header.message_type)
 
-    if message.block:
-        if not await message.block.verify():
-            print('INVALID BLOCK!!')
-            raise Exception('INVALID BLOCK')
-        else:
-            print('Block valid')
+    if not await message.verify():
+        print('INVALID MESSAGE!!')
+        print(message.message_type)
+        raise Exception('INVALID MESSAGE')
+    else:
+        print('Message valid')
+
+    # if message.block:
+    #     if not await message.block.verify():
+    #         print('INVALID BLOCK!!')
+    #         raise Exception('INVALID BLOCK')
+    #     else:
+    #         print('Block valid')
 
     if isinstance(message, KeepAliveMessage):
         print('peers..')

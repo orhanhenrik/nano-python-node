@@ -1,7 +1,8 @@
 import asyncio
 from enum import IntEnum
 
-from util.crypto import verify_pow, verify_signature, blake2b_hash, blake2b_async, verify_pow_async
+from util.crypto import verify_pow, verify_signature, blake2b_hash, blake2b_async, verify_pow_async, \
+    verify_signature_async
 
 
 class BlockType(IntEnum):
@@ -31,7 +32,12 @@ class Block:
         return bytes()
 
     async def verify(self):
-        return await self.verify_signature() and await self.verify_pow() and self.verify_consistency()
+        results = await asyncio.gather(
+            self.verify_signature(),
+            self.verify_pow(),
+            self.verify_consistency()
+        )
+        return all(results)
 
     async def verify_pow(self):
         return await verify_pow_async(self.root, self.work)
@@ -39,12 +45,10 @@ class Block:
     async def verify_signature(self):
         _hash = await self.hash()
         if hash and isinstance(self, OpenBlock):
-            print(self.block_type)
-            print(_hash.hex())
-            print(verify_signature(_hash, self.signature, self.account))
+            return await verify_signature_async(_hash, self.signature, self.account)
         return True
 
-    def verify_consistency(self):
+    async def verify_consistency(self):
         # Check that hashes it references exist.
         # Check that there is no conflicting transactions (branches)
         # Check that account has sufficient funds if type=send

@@ -1,8 +1,10 @@
+import asyncio
 from enum import IntEnum
 from typing import List
 
 from models.block import Block, BlockType, BlockParser
 from models.peer import Peer
+from util.crypto import verify_signature_async, blake2b_async
 
 
 class MessageType(IntEnum):
@@ -22,28 +24,31 @@ class MessageType(IntEnum):
 class Header:
     @classmethod
     def parse(cls, data: bytes):
-        greeting = data[0:2]
+        magic = data[0:2]
         version_max = data[2]
         version_current = data[3]
         version_min = data[4]
         message_type = MessageType(data[5])
         extensions = data[6]
-        return cls(greeting, version_max, version_current, version_min, message_type, extensions)
+        return cls(magic, version_max, version_current, version_min, message_type, extensions)
 
-    def __init__(self, greeting, version_max, version_current, version_min, message_type, extensions):
-        self.greeting = greeting
+    def __init__(self, magic, version_max, version_current, version_min, message_type, extensions):
+        self.magic = magic
         self.version_max = version_max
         self.version_current = version_current
         self.version_min = version_min
         self.message_type = message_type
         self.extensions = extensions
 
+    def verify(self):
+        return True
+
     @classmethod
     def default_header(cls):
         return cls(b'RC', 5, 5, 1, MessageType.KEEPALIVE, 0)
 
     def to_bytes(self):
-        return self.greeting + bytes([self.version_max, self.version_current, self.version_min, self.message_type.value, self.extensions])
+        return self.magic + bytes([self.version_max, self.version_current, self.version_min, self.message_type.value, self.extensions])
 
 
 class Message:
@@ -56,6 +61,9 @@ class Message:
         self.block_type = block_type
         self.block = None
         self.message_type = message_type
+
+    async def verify(self):
+        return self.header.verify()
 
     def to_bytes(self):
         return self.header.to_bytes() + bytes([self.block_type.value])
@@ -98,6 +106,13 @@ class PublishMessage(Message):
         super(PublishMessage, self).__init__(header, block_type, MessageType.PUBLISH)
         self.block = block
 
+    async def verify(self):
+        result = asyncio.gather(
+            super(PublishMessage, self).verify(),
+            self.block.verify()
+        )
+        return all(result)
+
     def to_bytes(self):
         return super(PublishMessage, self).to_bytes() + self.block.to_bytes()
 
@@ -113,6 +128,13 @@ class ReqMessage(Message):
             header = Header.default_header()
         super(ReqMessage, self).__init__(header, block_type, MessageType.CONFIRM_REQ)
         self.block = block
+
+    async def verify(self):
+        result = asyncio.gather(
+            super(ReqMessage, self).verify(),
+            self.block.verify()
+        )
+        return all(result)
 
     def to_bytes(self):
         return super(ReqMessage, self).to_bytes() + self.block.to_bytes()
@@ -136,6 +158,20 @@ class AckMessage(Message):
         super(AckMessage, self).__init__(header, block_type, MessageType.CONFIRM_ACK)
         self.vote = vote
         self.block = block
+
+    async def verify_signature(self):
+        _hash = await blake2b_async(
+            await self.block.hash() + self.vote['sequence']
+        )
+        return await verify_signature_async(_hash, self.vote['signature'], self.vote['account'])
+
+    async def verify(self):
+        results = await asyncio.gather(
+            super(AckMessage, self).verify(),
+            self.block.verify(),
+            self.verify_signature()
+        )
+        return all(results)
 
     def to_bytes(self):
         return super(AckMessage, self).to_bytes() + self.block.to_bytes()
