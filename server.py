@@ -1,26 +1,24 @@
 import asyncio
 import signal
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, Executor
+from concurrent.futures import Executor
 from typing import List
 
 import time
 import uvloop
 from uvloop.loop import UDPTransport, Loop, Server
 
-# from blake2 import try_hash
 from executors import process_executor, thread_executor
 from models.block import BlockType, BlockParser
-from models.messages import Message, MessageType, MessageParser, KeepAliveMessage, \
+from models.messages import Message, MessageParser, KeepAliveMessage, \
     FrontierReqMessage, BulkPullMessage
 from type_definitions import Address
-from util.crypto import blake2b_async
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 EXPAND_PEERS = False
 
-async def handle_msg(data: bytes, addr: Address, transport: UDPTransport):
 
+async def handle_msg(data: bytes, addr: Address, transport: UDPTransport):
     message: Message = MessageParser.parse(data)
     print(message.header.message_type)
 

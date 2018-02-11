@@ -7,10 +7,6 @@ from executors import thread_executor
 
 
 def verify_pow(data: bytes, work: bytes):
-    # h = blake2b(digest_size=8)
-    # h.update(work)
-    # h.update(data)
-    # digest = h.digest()[::-1]
     digest = blake2b_hash(work + data, digest_size=8)[::-1]
     return digest >= bytes.fromhex('ffffffc000000000')
 
@@ -21,9 +17,6 @@ async def verify_pow_async(data: bytes, work: bytes):
 
 
 def verify_signature(hash: bytes, signature: bytes, public_key: bytes):
-    # print('hash', len(hash), hash.hex())
-    # print('signature', len(signature), signature.hex())
-    # print('public_key', len(public_key), public_key.hex())
     verifying_key = VerifyingKey(public_key)
     try:
         verifying_key.verify(signature, hash)
@@ -46,6 +39,7 @@ def blake2b_hash(value: bytes, digest_size: int = 32):
 async def blake2b_async(value: bytes, digest_size: int = 32):
     _loop = asyncio.get_event_loop()
     return await _loop.run_in_executor(thread_executor, blake2b_hash, value)
+
 
 if __name__ == '__main__':
     # https://github.com/clemahieu/raiblocks/wiki/Design-features#signing-algorithm---ed25519
