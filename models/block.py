@@ -70,6 +70,7 @@ class SendBlock(Block):
 
     @classmethod
     def parse(cls, data: bytes):
+        assert len(data) == cls.LENGTH, f'Invalid data length! Expected: {cls.LENGTH}, actual: {len(data)}'
         previous = data[0:32]
         destination = data[32:64]
         balance = data[64:80]
@@ -98,6 +99,7 @@ class ReceiveBlock(Block):
 
     @classmethod
     def parse(cls, data: bytes):
+        assert len(data) == cls.LENGTH, f'Invalid data length! Expected: {cls.LENGTH}, actual: {len(data)}'
         previous = data[0:32]
         source = data[32:64]
         signature = data[64:128]
@@ -124,6 +126,7 @@ class OpenBlock(Block):
 
     @classmethod
     def parse(cls, data: bytes):
+        assert len(data) == cls.LENGTH, f'Invalid data length! Expected: {cls.LENGTH}, actual: {len(data)}'
         source = data[0:32]
         representative = data[32:64]
         account = data[64:96]
@@ -153,6 +156,7 @@ class ChangeBlock(Block):
 
     @classmethod
     def parse(cls, data: bytes):
+        assert len(data) == cls.LENGTH, f'Invalid data length! Expected: {cls.LENGTH}, actual: {len(data)}'
         previous = data[0:32]
         representative = data[32:64]
         signature = data[64:128]

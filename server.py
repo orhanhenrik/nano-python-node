@@ -8,10 +8,11 @@ import uvloop
 from uvloop.loop import UDPTransport, Loop, Server
 
 from executors import process_executor, thread_executor
-from models.block import BlockType, BlockParser
+from models.block import BlockType, BlockParser, Block
 from models.messages import Message, MessageParser, KeepAliveMessage, \
     FrontierReqMessage, BulkPullMessage
 from type_definitions import Address
+from util.numbers import public_key_to_account, account_to_public_key
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
@@ -71,6 +72,37 @@ class TCPServerProtocol(asyncio.Protocol):
         print('tcp data received', data)
 
 
+async def get_accounts(i: int, frontiers: List, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    print(f'start worker {i}')
+    c = 1
+    while len(frontiers):
+        start, end = frontiers.pop()
+        print(f'start {i} {c}')
+        print(public_key_to_account(start))
+        message = BulkPullMessage(start=start, end=bytes(32))
+        writer.write(message.to_bytes())
+        await writer.drain()
+
+        blocks = await read_bulk_pull(reader)
+        # await asyncio.sleep(0.1)
+        print(f'done {i} {c}, got {len(blocks)} blocks')
+        c += 1
+    print(f'worker {i} done. Pulled {c} accounts')
+
+
+async def get_all_accounts(frontiers, num_workers=10):
+    tasks = []
+    for i in range(num_workers):
+        # TODO: Get these from a peer registry
+        host = '127.0.0.1'
+        port = 7075
+        reader, writer = await asyncio.open_connection(host, port)
+        tasks.append(
+            get_accounts(i, frontiers, reader, writer)
+        )
+    return await asyncio.wait(tasks)
+
+
 async def get_frontiers(host, port=7075):
     s = time.time()
 
@@ -85,19 +117,31 @@ async def get_frontiers(host, port=7075):
     # Note: frontiers is only 25MB atm (391k frontiers). Investigate pulling frontiers from more
     # than one host if we have the bandwidth for it, since knowing all frontiers and having up to
     # date blocks is important.
+
+    print('getting frontiers')
     frontiers = await read_frontiers(reader)
-    print(len(frontiers))
+    print('getting accounts')
+    await get_all_accounts(frontiers[:1000])
+    print('finished getting accounts')
+
+    # frontiers = [
+    #     (account_to_public_key('xrb_115jwkxupcin9yy68rkb3adgsz5btga1rntcu5wichiabsdgt8eoq4f3pxsj'), bytes(32))
+    # ]
+    # print('getting only 1 account')
+    # _r, _w = await asyncio.open_connection(host, port, limit=2**20)
+    # await get_accounts(1, frontiers, _r, _w)
 
     # TODO: Do this for every frontier. Do many of these in parallel to multiple peers
     # TODO: Need to filter frontiers. If we already have frontiers newest block, don't fetch.
     # TODO: If we have a newer block than the peer, we need to send them the update (bulk_push?)
-    start, end = frontiers[0]
-    print(start.hex())
-    print(end.hex())
-    message2 = BulkPullMessage(start=start, end=bytes(32))
-    writer.write(message2.to_bytes())
-    await writer.drain()
-    await read_bulk_pull(reader)
+
+    # start, end = frontiers[0]
+    # print(start.hex())
+    # print(end.hex())
+    # message2 = BulkPullMessage(start=start, end=bytes(32))
+    # writer.write(message2.to_bytes())
+    # await writer.drain()
+    # await read_bulk_pull(reader)
 
     writer.close()
 
@@ -110,9 +154,9 @@ async def read_frontiers(reader: asyncio.StreamReader):
     # Note: frontiers arrive ordered by ascending account value
     while True:
         # Each frontier is 2x32 bytes
-        line = await reader.read(64)
-        if not line:
-            break
+        line = bytes()
+        while len(line) != 64:
+            line += await reader.read(64 - len(line))
         account = line[0:32]
         # The account 0000...0 signals the end of the frontiers message
         if account == bytes(32):
@@ -126,24 +170,37 @@ async def read_frontiers(reader: asyncio.StreamReader):
 
 
 async def read_bulk_pull(reader: asyncio.StreamReader):
+    blocks: List[Block] = []
     while True:
         block_type_byte = await reader.read(1)
         if not block_type_byte:
             print('unexpected end of stream')
             break
 
-        block_type = BlockType(block_type_byte[0])
+        try:
+            block_type = BlockType(block_type_byte[0])
+        except ValueError:
+            raise Exception(f'{block_type_byte.hex()} is not a valid block type..')
+
         # Block type 0x01 (NOT_A_BLOCK) signals that there are no more blocks
         if block_type == BlockType.NOT_A_BLOCK:
-            print('end of blocks')
             break
 
-        length = BlockParser.length(block_type)
         # Need to read the right amount of bytes so that we start at the right place when reading
         # the next block
-        block_data = await reader.read(length)
+        length = BlockParser.length(block_type)
+        block_data = bytes()
+        # This is needed because reader.read(n) may return less than n bytes
+        while len(block_data) != length:
+            block_data += await reader.read(length - len(block_data))
+
         block = BlockParser.parse(block_type, block_data)
-        print(block)
+        blocks.append(block)
+
+    if len(blocks) and blocks[-1].block_type != BlockType.OPEN:
+        raise Exception(f'Last block should be OPEN, but was {blocks[-1].block_type.name}')
+
+    return blocks
 
 
 async def startup():

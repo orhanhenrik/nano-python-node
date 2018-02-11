@@ -213,8 +213,6 @@ class BulkPullMessage(Message):
         self.end = end
 
     def to_bytes(self):
-        print(len(self.start))
-        print(len(self.end))
         return super(BulkPullMessage, self).to_bytes() + self.start + self.end
 
 
