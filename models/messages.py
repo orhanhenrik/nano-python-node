@@ -17,8 +17,7 @@ class MessageType(IntEnum):
     BULK_PULL = 6
     BULK_PUSH = 7
     FRONTIER_REQ = 8
-    FRONTIER = 10000
-    BULK = 10001
+    BULK_PULL_BLOCKS = 9
 
 
 class Header:
@@ -44,8 +43,8 @@ class Header:
         return True
 
     @classmethod
-    def default_header(cls):
-        return cls(b'RC', 5, 5, 1, MessageType.KEEPALIVE, 0)
+    def default_header(cls, message_type: MessageType):
+        return cls(b'RC', 5, 5, 1, message_type, 0)
 
     def to_bytes(self):
         return self.magic + bytes([self.version_max, self.version_current, self.version_min, self.message_type.value, self.extensions])
@@ -81,7 +80,7 @@ class KeepAliveMessage(Message):
 
     def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID, peers: List[Peer] = None):
         if header is None:
-            header = Header.default_header()
+            header = Header.default_header(MessageType.KEEPALIVE)
         if peers is None:
             peers = []
 
@@ -102,7 +101,7 @@ class PublishMessage(Message):
 
     def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID, block: Block = None):
         if header is None:
-            header = Header.default_header()
+            header = Header.default_header(MessageType.PUBLISH)
         super(PublishMessage, self).__init__(header, block_type, MessageType.PUBLISH)
         self.block = block
 
@@ -125,7 +124,7 @@ class ReqMessage(Message):
 
     def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID, block: Block = None):
         if header is None:
-            header = Header.default_header()
+            header = Header.default_header(MessageType.CONFIRM_REQ)
         super(ReqMessage, self).__init__(header, block_type, MessageType.CONFIRM_REQ)
         self.block = block
 
@@ -154,7 +153,7 @@ class AckMessage(Message):
 
     def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID, vote = None, block: Block = None):
         if header is None:
-            header = Header.default_header()
+            header = Header.default_header(MessageType.CONFIRM_ACK)
         super(AckMessage, self).__init__(header, block_type, MessageType.CONFIRM_ACK)
         self.vote = vote
         self.block = block
@@ -175,6 +174,48 @@ class AckMessage(Message):
 
     def to_bytes(self):
         return super(AckMessage, self).to_bytes() + self.block.to_bytes()
+
+
+class FrontierReqMessage(Message):
+    @classmethod
+    def parse(cls, header: Header, block_type: BlockType, data: bytes):
+        account = data[0:32]
+        age = data[32:36]
+        count = data[36:40]
+        return cls(header, block_type, account, age, count)
+
+    def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID,
+                 account: bytes = bytes(32), age: bytes = bytes(4), count: bytes = bytes(4)):
+        if header is None:
+            header = Header.default_header(MessageType.FRONTIER_REQ)
+        super(FrontierReqMessage, self).__init__(header, block_type, MessageType.FRONTIER_REQ)
+        self.account = account
+        self.age = age
+        self.count = count
+
+    def to_bytes(self):
+        return super(FrontierReqMessage, self).to_bytes() + self.account + self.age + self.count
+
+
+class BulkPullMessage(Message):
+    @classmethod
+    def parse(cls, header: Header, block_type: BlockType, data: bytes):
+        start = data[0:32]
+        end = data[32:64]
+        return cls(header, block_type, start, end)
+
+    def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID,
+                 start: bytes = bytes(32), end: bytes = bytes(32)):
+        if header is None:
+            header = Header.default_header(MessageType.BULK_PULL)
+        super(BulkPullMessage, self).__init__(header, block_type, MessageType.BULK_PULL)
+        self.start = start
+        self.end = end
+
+    def to_bytes(self):
+        print(len(self.start))
+        print(len(self.end))
+        return super(BulkPullMessage, self).to_bytes() + self.start + self.end
 
 
 class MessageParser:

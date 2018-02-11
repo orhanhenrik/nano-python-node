@@ -9,12 +9,15 @@ from uvloop.loop import UDPTransport, Loop, Server
 
 # from blake2 import try_hash
 from executors import process_executor, thread_executor
-from models.messages import Message, MessageType, MessageParser, KeepAliveMessage
+from models.block import BlockType, BlockParser
+from models.messages import Message, MessageType, MessageParser, KeepAliveMessage, \
+    FrontierReqMessage, BulkPullMessage
 from type_definitions import Address
 from util.crypto import blake2b_async
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
+EXPAND_PEERS = False
 
 async def handle_msg(data: bytes, addr: Address, transport: UDPTransport):
 
@@ -28,13 +31,6 @@ async def handle_msg(data: bytes, addr: Address, transport: UDPTransport):
     else:
         print('Message valid')
 
-    # if message.block:
-    #     if not await message.block.verify():
-    #         print('INVALID BLOCK!!')
-    #         raise Exception('INVALID BLOCK')
-    #     else:
-    #         print('Block valid')
-
     if isinstance(message, KeepAliveMessage):
         print('peers..')
         print(message.peers)
@@ -42,7 +38,6 @@ async def handle_msg(data: bytes, addr: Address, transport: UDPTransport):
         keepalive_response = KeepAliveMessage().to_bytes()
         transport.sendto(keepalive_response, addr)
 
-        EXPAND_PEERS = False
         if EXPAND_PEERS and len(message.peers):
             print(f'constructing keepalive for first peer {message.peers[0]}')
             transport.sendto(keepalive_response, message.peers[0].to_tuple())
@@ -53,7 +48,6 @@ async def handle_msg(data: bytes, addr: Address, transport: UDPTransport):
 
 
 class UDPServerProtocol(asyncio.DatagramProtocol):
-
     def __init__(self):
         self.transport = None
 
@@ -65,6 +59,7 @@ class UDPServerProtocol(asyncio.DatagramProtocol):
         asyncio.ensure_future(handle_msg(data, addr, transport))
 
 
+# This server needs to respond to frontier_req and bulk_pull
 class TCPServerProtocol(asyncio.Protocol):
     def __init__(self):
         print('init')
@@ -78,6 +73,94 @@ class TCPServerProtocol(asyncio.Protocol):
         print('tcp data received', data)
 
 
+async def get_frontiers(host, port=7075):
+    s = time.time()
+
+    reader, writer = await asyncio.open_connection(host, port)
+
+    # Fetch all frontiers - max age and count - I don't know how lowering these values would affect
+    # the result.
+    message = FrontierReqMessage(age=bytes([255,255,255,255]), count=bytes([255,255,255,255]))
+    writer.write(message.to_bytes())
+    await writer.drain()
+
+    # Note: frontiers is only 25MB atm (391k frontiers). Investigate pulling frontiers from more
+    # than one host if we have the bandwidth for it, since knowing all frontiers and having up to
+    # date blocks is important.
+    frontiers = await read_frontiers(reader)
+    print(len(frontiers))
+
+    # TODO: Do this for every frontier. Do many of these in parallel to multiple peers
+    # TODO: Need to filter frontiers. If we already have frontiers newest block, don't fetch.
+    # TODO: If we have a newer block than the peer, we need to send them the update (bulk_push?)
+    start, end = frontiers[0]
+    print(start.hex())
+    print(end.hex())
+    message2 = BulkPullMessage(start=start, end=bytes(32))
+    writer.write(message2.to_bytes())
+    await writer.drain()
+    await read_bulk_pull(reader)
+
+    writer.close()
+
+    print(f'get_frontiers from {host} {port} done in {(time.time()-s)*1000}ms')
+
+
+async def read_frontiers(reader: asyncio.StreamReader):
+    c = 0
+    frontiers = []
+    # Note: frontiers arrive ordered by ascending account value
+    while True:
+        # Each frontier is 2x32 bytes
+        line = await reader.read(64)
+        if not line:
+            break
+        account = line[0:32]
+        # The account 0000...0 signals the end of the frontiers message
+        if account == bytes(32):
+            break
+        block_hash = line[32:64]
+        frontiers.append((account, block_hash))
+        c += 1
+
+    print(f'done pulling {c} frontiers!')
+    return frontiers
+
+
+async def read_bulk_pull(reader: asyncio.StreamReader):
+    while True:
+        block_type_byte = await reader.read(1)
+        if not block_type_byte:
+            print('unexpected end of stream')
+            break
+
+        block_type = BlockType(block_type_byte[0])
+        # Block type 0x01 (NOT_A_BLOCK) signals that there are no more blocks
+        if block_type == BlockType.NOT_A_BLOCK:
+            print('end of blocks')
+            break
+
+        length = BlockParser.length(block_type)
+        # Need to read the right amount of bytes so that we start at the right place when reading
+        # the next block
+        block_data = await reader.read(length)
+        block = BlockParser.parse(block_type, block_data)
+        print(block)
+
+
+async def startup():
+    import socket
+    ipv4 = socket.gethostbyname(socket.gethostname())
+    ipv6 = f'::ffff:{ipv4}'
+    # print(f'sending keepalive to {ipv6}')
+    # # Send keepalive to local rai_node in order to start receiving updates from it.
+    # transport.sendto(KeepAliveMessage().to_bytes(), (ipv6, 7075, 0, 0))
+
+    # Fetch frontiers and blocks from the local rai_node instance (separate service).
+    # This should only be done on bootstrap in the future.
+    await get_frontiers(ipv6, 7075)
+
+
 loop = asyncio.get_event_loop()
 
 tcp_coro = loop.create_server(TCPServerProtocol, '::', 8888)
@@ -88,71 +171,10 @@ udp_coro = loop.create_datagram_endpoint(
 
 print('starting TCP server')
 server = loop.run_until_complete(tcp_coro)
-print(server)
 print('starting UDP server')
 transport, protocol = loop.run_until_complete(udp_coro)
 
-
-
-
-async def boot():
-    import socket
-    ipv4 = socket.gethostbyname(socket.gethostname())
-    ipv6 = f'::ffff:{ipv4}'
-    print(f'sending keepalive to {ipv6}')
-    transport.sendto(KeepAliveMessage().to_bytes(), (ipv6, 7075, 0, 0))
-
-    # await multi_hash()
-    # await counter_in_threads()
-
-    # await asyncio.gather(
-    #     blake2b_async(b't1'),
-    #     blake2b_async(b't2')
-    # )
-    # print('done')
-
-
-def waiter(n):
-    print(n, 'start')
-    time.sleep(1)
-    print(n, 'done')
-    return n*2
-
-
-async def multi_hash():
-    _loop = asyncio.get_event_loop()
-    found = False
-    s0 = time.time()
-    while not found:
-        s = time.time()
-        tasks = [
-            _loop.run_in_executor(process_executor, try_hash, i, 256*256)
-            for i in range(8)
-        ]
-        await asyncio.wait(tasks)
-        print((time.time() - s)*1000)
-        for t in tasks:
-            print(t.result())
-            if t.result():
-                found = True
-                print('FOUND', t.result())
-                print((time.time() - s0)*1000)
-
-
-async def counter_in_threads():
-    _loop = asyncio.get_event_loop()
-    print('making tasks')
-    tasks = [
-        _loop.run_in_executor(thread_executor, waiter, i)
-        for i in range(10)
-    ]
-    print('waiting')
-    await asyncio.wait(tasks)
-    print('finished')
-    print([t.result() for t in tasks])
-
-
-asyncio.ensure_future(boot(), loop=loop)
+asyncio.ensure_future(startup(), loop=loop)
 
 
 def shutdown(_loop: Loop, _transport: asyncio.Transport, _server: Server, executors: List[Executor]):

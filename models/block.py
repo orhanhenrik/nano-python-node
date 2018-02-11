@@ -66,6 +66,8 @@ class Block:
 
 
 class SendBlock(Block):
+    LENGTH = 152
+
     @classmethod
     def parse(cls, data: bytes):
         previous = data[0:32]
@@ -92,6 +94,8 @@ class SendBlock(Block):
 
 
 class ReceiveBlock(Block):
+    LENGTH = 136
+
     @classmethod
     def parse(cls, data: bytes):
         previous = data[0:32]
@@ -116,6 +120,8 @@ class ReceiveBlock(Block):
 
 
 class OpenBlock(Block):
+    LENGTH = 168
+
     @classmethod
     def parse(cls, data: bytes):
         source = data[0:32]
@@ -143,6 +149,8 @@ class OpenBlock(Block):
 
 
 class ChangeBlock(Block):
+    LENGTH = 136
+
     @classmethod
     def parse(cls, data: bytes):
         previous = data[0:32]
@@ -167,6 +175,19 @@ class ChangeBlock(Block):
 
 
 class BlockParser:
+    @staticmethod
+    def length(block_type: BlockType) -> int:
+        if block_type == BlockType.SEND:
+            return SendBlock.LENGTH
+        elif block_type == BlockType.RECEIVE:
+            return ReceiveBlock.LENGTH
+        elif block_type == BlockType.OPEN:
+            return OpenBlock.LENGTH
+        elif block_type == BlockType.CHANGE:
+            return ChangeBlock.LENGTH
+        else:
+            return 0
+
     @staticmethod
     def parse(block_type: BlockType, data: bytes) -> Block:
         if block_type == BlockType.SEND:
