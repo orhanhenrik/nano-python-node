@@ -1,7 +1,7 @@
 import asyncio
 import signal
 from concurrent.futures import Executor
-from typing import List
+from typing import List, Tuple
 
 import time
 import uvloop
@@ -72,22 +72,32 @@ class TCPServerProtocol(asyncio.Protocol):
         print('tcp data received', data)
 
 
-async def get_accounts(i: int, frontiers: List, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+async def get_accounts(i: int, frontiers: List[Tuple[bytes, bytes]], reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
     print(f'start worker {i}')
-    c = 1
+    account_count = 0
+    block_count = 0
+    failures = 0
     while len(frontiers):
         start, end = frontiers.pop()
-        print(f'start {i} {c}')
-        print(public_key_to_account(start))
         message = BulkPullMessage(start=start, end=bytes(32))
         writer.write(message.to_bytes())
         await writer.drain()
 
-        blocks = await read_bulk_pull(reader)
-        # await asyncio.sleep(0.1)
-        print(f'done {i} {c}, got {len(blocks)} blocks')
-        c += 1
-    print(f'worker {i} done. Pulled {c} accounts')
+        try:
+            blocks = await read_bulk_pull(reader)
+        except Exception:
+            # If getting blocks failed, retry at a later stage
+            frontiers.append((start, end))
+            failures += 1
+            continue
+
+        account_count += 1
+        block_count += len(blocks)
+        if len(frontiers) % 100 == 0:
+            print(len(frontiers))
+
+    print(f'worker {i} done. Pulled {account_count} accounts, {block_count} blocks.'
+          f'Failures: {failures}')
 
 
 async def get_all_accounts(frontiers, num_workers=10):
@@ -121,7 +131,7 @@ async def get_frontiers(host, port=7075):
     print('getting frontiers')
     frontiers = await read_frontiers(reader)
     print('getting accounts')
-    await get_all_accounts(frontiers[:1000])
+    await get_all_accounts(frontiers)
     print('finished getting accounts')
 
     # frontiers = [
@@ -134,14 +144,6 @@ async def get_frontiers(host, port=7075):
     # TODO: Do this for every frontier. Do many of these in parallel to multiple peers
     # TODO: Need to filter frontiers. If we already have frontiers newest block, don't fetch.
     # TODO: If we have a newer block than the peer, we need to send them the update (bulk_push?)
-
-    # start, end = frontiers[0]
-    # print(start.hex())
-    # print(end.hex())
-    # message2 = BulkPullMessage(start=start, end=bytes(32))
-    # writer.write(message2.to_bytes())
-    # await writer.drain()
-    # await read_bulk_pull(reader)
 
     writer.close()
 
@@ -199,6 +201,8 @@ async def read_bulk_pull(reader: asyncio.StreamReader):
 
     if len(blocks) and blocks[-1].block_type != BlockType.OPEN:
         raise Exception(f'Last block should be OPEN, but was {blocks[-1].block_type.name}')
+
+    # TODO: Check that all the blocks point to each other as source - no missing blocks
 
     return blocks
 
