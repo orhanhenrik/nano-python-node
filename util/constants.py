@@ -26,4 +26,5 @@ if __name__ == '__main__':
     fut: asyncio.Future = asyncio.ensure_future(GENESIS_BLOCK.verify_signature())
     loop.run_until_complete(fut)
     assert fut.result(), 'Genesis block signature is invalid'
+    print('Genesis valid')
     loop.close()
