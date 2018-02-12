@@ -22,6 +22,11 @@ async def benchmark_blake2b(n, executor):
         await blake2b_async(hashable, executor=executor)
 
 
+async def benchmark_blake2b_parallel(n, executor):
+    tasks = [blake2b_async(hashable, executor=executor) for i in range(n)]
+    await asyncio.gather(*tasks)
+
+
 def sync_benchmark_signature_validation(n):
     for i in range(n):
         verify_signature(hash, signature, public_key)
@@ -31,6 +36,10 @@ async def benchmark_signature_validation(n, executor):
     for i in range(n):
         await verify_signature_async(hash, signature, public_key, executor=executor)
 
+async def benchmark_signature_validation_parallel(n, executor):
+    tasks = [verify_signature_async(hash, signature, public_key, executor=executor) for i in range(n)]
+    await asyncio.gather(*tasks)
+
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
@@ -38,8 +47,8 @@ if __name__ == '__main__':
     te = ThreadPoolExecutor(max_workers=1)
     pe = ProcessPoolExecutor(max_workers=1)
 
-    n = 10
-    # Blake2b
+    n = 1000
+    # Blake2b serial
     start = time.time()
     sync_benchmark_blake2b(n)
     print(f'blake2b, n={n} sync done in {(time.time()-start)*1000} ms')
@@ -54,6 +63,19 @@ if __name__ == '__main__':
     loop.run_until_complete(fut)
     print(f'blake2b, n={n} process done in {(time.time()-start)*1000} ms')
 
+    # Blake2b parallel
+    start = time.time()
+    fut: asyncio.Future = asyncio.ensure_future(benchmark_blake2b_parallel(n, te))
+    loop.run_until_complete(fut)
+    print(f'blake2b parallel, n={n} thread done in {(time.time()-start)*1000} ms')
+
+    start = time.time()
+    fut: asyncio.Future = asyncio.ensure_future(benchmark_blake2b_parallel(n, pe))
+    loop.run_until_complete(fut)
+    print(f'blake2b parallel, n={n} process done in {(time.time()-start)*1000} ms')
+
+
+    n = 10
     # Signature
     start = time.time()
     sync_benchmark_signature_validation(n)
@@ -68,5 +90,16 @@ if __name__ == '__main__':
     fut: asyncio.Future = asyncio.ensure_future(benchmark_signature_validation(n, pe))
     loop.run_until_complete(fut)
     print(f'signature, n={n} process done in {(time.time()-start)*1000} ms')
+
+    # Signature parallel
+    start = time.time()
+    fut: asyncio.Future = asyncio.ensure_future(benchmark_signature_validation_parallel(n, te))
+    loop.run_until_complete(fut)
+    print(f'signature parallel, n={n} thread done in {(time.time()-start)*1000} ms')
+
+    start = time.time()
+    fut: asyncio.Future = asyncio.ensure_future(benchmark_signature_validation_parallel(n, pe))
+    loop.run_until_complete(fut)
+    print(f'signature parallel, n={n} process done in {(time.time()-start)*1000} ms')
 
     loop.close()
