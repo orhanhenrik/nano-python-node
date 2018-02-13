@@ -56,7 +56,8 @@ class Block:
         return True
 
     def to_bytes(self) -> bytes:
-        return bytes([self.block_type.value])
+        return bytes()
+        # return bytes([self.block_type.value])
 
     def __str__(self) -> str:
         return f'<Block {self.block_type.name}>'
@@ -90,8 +91,15 @@ class SendBlock(Block):
     def root(self):
         return self.previous
 
+    def hash_sync(self):
+        return blake2b_hash(self.previous + self.destination + self.balance)
+
     async def hash(self):
         return await blake2b_async(self.previous + self.destination + self.balance)
+
+    def to_bytes(self) -> bytes:
+        return super(SendBlock, self).to_bytes() + self.previous + self.destination + self.balance\
+               + self.signature + self.work
 
 
 class ReceiveBlock(Block):
@@ -117,8 +125,15 @@ class ReceiveBlock(Block):
     def root(self):
         return self.previous
 
+    def hash_sync(self):
+        return blake2b_hash(self.previous + self.source)
+
     async def hash(self):
         return await blake2b_async(self.previous + self.source)
+
+    def to_bytes(self) -> bytes:
+        return super(ReceiveBlock, self).to_bytes() + self.previous + self.source + self.signature\
+               + self.work
 
 
 class OpenBlock(Block):
@@ -147,8 +162,15 @@ class OpenBlock(Block):
     def root(self):
         return self.account
 
+    def hash_sync(self):
+        return blake2b_hash(self.source + self.representative + self.account)
+
     async def hash(self):
         return await blake2b_async(self.source + self.representative + self.account)
+
+    def to_bytes(self) -> bytes:
+        return super(OpenBlock, self).to_bytes() + self.source + self.representative + self.account\
+               + self.signature + self.work
 
 
 class ChangeBlock(Block):
@@ -174,8 +196,15 @@ class ChangeBlock(Block):
     def root(self):
         return self.previous
 
+    def hash_sync(self):
+        return blake2b_hash(self.previous + self.representative)
+
     async def hash(self):
         return await blake2b_async(self.previous + self.representative)
+
+    def to_bytes(self) -> bytes:
+        return super(ChangeBlock, self).to_bytes() + self.previous + self.representative\
+               + self.signature + self.work
 
 
 class BlockParser:

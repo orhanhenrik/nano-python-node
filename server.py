@@ -5,6 +5,7 @@ from typing import List, Tuple
 
 import time
 import uvloop
+import pickle
 from uvloop.loop import UDPTransport, Loop, Server
 
 from executors import process_executor, thread_executor
@@ -12,7 +13,6 @@ from models.block import BlockType, BlockParser, Block
 from models.messages import Message, MessageParser, KeepAliveMessage, \
     FrontierReqMessage, BulkPullMessage
 from type_definitions import Address
-from util.numbers import public_key_to_account, account_to_public_key
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
@@ -77,6 +77,7 @@ async def get_accounts(i: int, frontiers: List[Tuple[bytes, bytes]], reader: asy
     account_count = 0
     block_count = 0
     failures = 0
+    chains = []
     while len(frontiers):
         start, end = frontiers.pop()
         message = BulkPullMessage(start=start, end=bytes(32))
@@ -93,11 +94,13 @@ async def get_accounts(i: int, frontiers: List[Tuple[bytes, bytes]], reader: asy
 
         account_count += 1
         block_count += len(blocks)
-        if len(frontiers) % 100 == 0:
-            print(len(frontiers))
+        chains.append(blocks)
+        if len(frontiers) != 0 and len(frontiers) % 100 == 0:
+            print(f'frontiers left:{len(frontiers)}')
 
     print(f'worker {i} done. Pulled {account_count} accounts, {block_count} blocks.'
           f'Failures: {failures}')
+    return chains
 
 
 async def get_all_accounts(frontiers, num_workers=10):
@@ -110,7 +113,7 @@ async def get_all_accounts(frontiers, num_workers=10):
         tasks.append(
             get_accounts(i, frontiers, reader, writer)
         )
-    return await asyncio.wait(tasks)
+    return [chain for chains in await asyncio.gather(*tasks) for chain in chains]
 
 
 async def get_frontiers(host, port=7075):
@@ -131,8 +134,10 @@ async def get_frontiers(host, port=7075):
     print('getting frontiers')
     frontiers = await read_frontiers(reader)
     print('getting accounts')
-    await get_all_accounts(frontiers)
+    chains = await get_all_accounts(frontiers)
     print('finished getting accounts')
+    with open('all_chains.dump', 'wb') as f:
+        pickle.dump(chains, f)
 
     # frontiers = [
     #     (account_to_public_key('xrb_115jwkxupcin9yy68rkb3adgsz5btga1rntcu5wichiabsdgt8eoq4f3pxsj'), bytes(32))

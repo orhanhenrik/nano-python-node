@@ -4,7 +4,7 @@ from hashlib import blake2b
 
 from pure25519_blake2b.ed25519_oop import VerifyingKey, BadSignatureError, SigningKey
 
-from executors import thread_executor
+from executors import thread_executor, process_executor
 
 
 def verify_pow(data: bytes, work: bytes):
@@ -27,7 +27,8 @@ def verify_signature(hash: bytes, signature: bytes, public_key: bytes):
         return False
 
 
-async def verify_signature_async(hash: bytes, signature: bytes, public_key: bytes, executor: Executor = thread_executor):
+# This task is quite slow (atm) - so executing it in a new process is good for performance
+async def verify_signature_async(hash: bytes, signature: bytes, public_key: bytes, executor: Executor = process_executor):
     _loop = asyncio.get_event_loop()
     return await _loop.run_in_executor(executor, verify_signature, hash, signature, public_key)
 
@@ -59,3 +60,5 @@ if __name__ == '__main__':
     public_key = b'J\xf2\xb8L\xae\xe7\x8c0\xd2\xcaM\xdb\x1fq\xb2E\t\xec[\x06\x19\xe5\xa7\xd7\x90\x9c\x84\x0e\x8d\x84\x9a\x1e'
     valid = verify_signature(hash, signature, public_key)
     print("signature valid:", valid)
+    assert valid, "Valid signature failed"
+    assert not verify_signature(hash+b'x', signature, public_key), "Invalid signature was not caught.."

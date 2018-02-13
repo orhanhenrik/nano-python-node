@@ -36,6 +36,7 @@ async def benchmark_signature_validation(n, executor):
     for i in range(n):
         await verify_signature_async(hash, signature, public_key, executor=executor)
 
+
 async def benchmark_signature_validation_parallel(n, executor):
     tasks = [verify_signature_async(hash, signature, public_key, executor=executor) for i in range(n)]
     await asyncio.gather(*tasks)
