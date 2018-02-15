@@ -1,2 +1,4 @@
 *.dump
 *.db
+*.ldb
+*.ldb-lock

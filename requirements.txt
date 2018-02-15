@@ -1,5 +1,5 @@
-#ed25519==1.4
 git+git://github.com/orhanhenrik/python-pure25519-blake2b.git#egg=pure25519_blake2b
 ipaddr==2.2.0
+lmdb==0.93
 python-rocksdb==0.6.8
 uvloop==0.9.1
