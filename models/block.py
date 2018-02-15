@@ -28,6 +28,9 @@ class Block:
     def root(self) -> bytes:
         return bytes()
 
+    def hash_sync(self):
+        return bytes()
+
     async def hash(self):
         return bytes()
 
@@ -56,8 +59,7 @@ class Block:
         return True
 
     def to_bytes(self) -> bytes:
-        return bytes()
-        # return bytes([self.block_type.value])
+        return bytes([self.block_type.value])
 
     def __str__(self) -> str:
         return f'<Block {self.block_type.name}>'

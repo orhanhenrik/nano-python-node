@@ -4,6 +4,8 @@ from concurrent.futures import Executor
 from typing import List, Tuple
 
 import time
+
+import marshal
 import uvloop
 import pickle
 from uvloop.loop import UDPTransport, Loop, Server
@@ -136,8 +138,12 @@ async def get_frontiers(host, port=7075):
     print('getting accounts')
     chains = await get_all_accounts(frontiers)
     print('finished getting accounts')
-    with open('all_chains.dump', 'wb') as f:
-        pickle.dump(chains, f)
+    with open('marshal_chains.dump', 'wb') as f:
+        chains = list(map(
+          lambda chain: list(map(lambda block: block.to_bytes(), chain)),
+          chains
+        ))
+        marshal.dump(chains, f)
 
     # frontiers = [
     #     (account_to_public_key('xrb_115jwkxupcin9yy68rkb3adgsz5btga1rntcu5wichiabsdgt8eoq4f3pxsj'), bytes(32))
