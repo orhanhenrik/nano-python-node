@@ -13,7 +13,7 @@ from uvloop.loop import UDPTransport, Loop, Server
 from executors import process_executor, thread_executor
 from models.block import BlockType, BlockParser, Block
 from models.messages import Message, MessageParser, KeepAliveMessage, \
-    FrontierReqMessage, BulkPullMessage
+    FrontierReqMessage, BulkPullMessage, BulkPullBlocksMessage
 from type_definitions import Address
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -27,7 +27,7 @@ async def handle_msg(data: bytes, addr: Address, transport: UDPTransport):
 
     if not await message.verify():
         print('INVALID MESSAGE!!')
-        print(message.message_type)
+        print(message.header.message_type)
         raise Exception('INVALID MESSAGE')
     else:
         print('Message valid')
@@ -125,7 +125,7 @@ async def get_frontiers(host, port=7075):
 
     # Fetch all frontiers - max age and count - I don't know how lowering these values would affect
     # the result.
-    message = FrontierReqMessage(age=bytes([255,255,255,255]), count=bytes([255,255,255,255]))
+    message = FrontierReqMessage(age=bytes([255]*4), count=bytes([255]*4))
     writer.write(message.to_bytes())
     await writer.drain()
 
@@ -135,28 +135,22 @@ async def get_frontiers(host, port=7075):
 
     print('getting frontiers')
     frontiers = await read_frontiers(reader)
+
+    # TODO: Need to filter frontiers. If we already have frontiers newest block, don't fetch.
+    # TODO: If we have a newer block than the peer, we need to send them the update (bulk_push?)
+
     print('getting accounts')
     chains = await get_all_accounts(frontiers)
     print('finished getting accounts')
+    writer.close()
+
+    # Dump all account chains to file
     with open('marshal_chains.dump', 'wb') as f:
         chains = list(map(
           lambda chain: list(map(lambda block: block.to_bytes(), chain)),
           chains
         ))
         marshal.dump(chains, f)
-
-    # frontiers = [
-    #     (account_to_public_key('xrb_115jwkxupcin9yy68rkb3adgsz5btga1rntcu5wichiabsdgt8eoq4f3pxsj'), bytes(32))
-    # ]
-    # print('getting only 1 account')
-    # _r, _w = await asyncio.open_connection(host, port, limit=2**20)
-    # await get_accounts(1, frontiers, _r, _w)
-
-    # TODO: Do this for every frontier. Do many of these in parallel to multiple peers
-    # TODO: Need to filter frontiers. If we already have frontiers newest block, don't fetch.
-    # TODO: If we have a newer block than the peer, we need to send them the update (bulk_push?)
-
-    writer.close()
 
     print(f'get_frontiers from {host} {port} done in {(time.time()-s)*1000}ms')
 
@@ -182,7 +176,7 @@ async def read_frontiers(reader: asyncio.StreamReader):
     return frontiers
 
 
-async def read_bulk_pull(reader: asyncio.StreamReader):
+async def read_multiple_blocks(reader: asyncio.StreamReader, max_count: int = 0):
     blocks: List[Block] = []
     while True:
         block_type_byte = await reader.read(1)
@@ -210,20 +204,58 @@ async def read_bulk_pull(reader: asyncio.StreamReader):
         block = BlockParser.parse(block_type, block_data)
         blocks.append(block)
 
+        if max_count != 0 and len(blocks) == max_count:
+            break
+
+    return blocks
+
+
+async def read_bulk_pull(reader: asyncio.StreamReader):
+    blocks: List[Block] = read_multiple_blocks(reader)
     if len(blocks) and blocks[-1].block_type != BlockType.OPEN:
         raise Exception(f'Last block should be OPEN, but was {blocks[-1].block_type.name}')
 
     # TODO: Check that all the blocks point to each other as source - no missing blocks
-
     return blocks
+
+
+# This function is not tested for use yet.
+# As of 20.02.2017 the official node implementation does not return all blocks when requesting
+# bulk_bull_blocks, so this method is not usable yet.
+async def bulk_pull_blocks(host, port=7075):
+    s = time.time()
+
+    reader, writer = await asyncio.open_connection(host, port)
+
+    # Fetch all frontiers - max age and count - I don't know how lowering these values would affect
+    # the result.
+    min_hash = bytes([0]*32)
+    max_hash = bytes([255]*32)
+    has_more = True
+    blocks = []
+    while has_more:
+        message = BulkPullBlocksMessage(min_hash=min_hash, max_hash=max_hash)
+
+        writer.write(message.to_bytes())
+        await writer.drain()
+        print('reading response..')
+        new_blocks: List[Block] = await read_multiple_blocks(reader)
+        blocks += new_blocks
+        min_hash = new_blocks[-1].hash_sync()
+        print(f'got {len(new_blocks)} new blocks. New min hash: {min_hash.hex()}')
+        time.sleep(1)
+
+    print(f'finished, got {len(blocks)} blocks in {(time.time()-s)*1000}ms')
+    writer.close()
 
 
 async def startup():
     import socket
     ipv4 = socket.gethostbyname(socket.gethostname())
     ipv6 = f'::ffff:{ipv4}'
-    # print(f'sending keepalive to {ipv6}')
+
     # # Send keepalive to local rai_node in order to start receiving updates from it.
+    # print(f'sending keepalive to {ipv6}')
     # transport.sendto(KeepAliveMessage().to_bytes(), (ipv6, 7075, 0, 0))
 
     # Fetch frontiers and blocks from the local rai_node instance (separate service).

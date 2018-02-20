@@ -2,6 +2,7 @@ import asyncio
 from concurrent.futures import Executor
 from hashlib import blake2b
 
+import time
 from pure25519_blake2b.ed25519_oop import VerifyingKey, BadSignatureError, SigningKey
 
 from executors import thread_executor, process_executor
@@ -58,7 +59,9 @@ if __name__ == '__main__':
     hash = b'U\x00\x95\xad\xd6\xd70\xa9D\x02\xc9\xd2BF\xae\x14\x19\xf5\xd8\n\xa3{8\x99\xfd[\xa5c}\xd0\xc7~'
     signature = b'\xeb\xb5Sv\xee1U\x06X\xab3q.\xd8{\xf5{\xda\x8e\xd1\xa1\xb0\x1a\xeair\x0e\xc6D\x1a\xc5\x08\xb8\xbdk67\xae\x80\xc4s\xd1\\\x91\xabQf\xe3\x18\xd7\xb1??c6\xe4\xa8\x91f^\xc5\x8b\xfe\x07'
     public_key = b'J\xf2\xb8L\xae\xe7\x8c0\xd2\xcaM\xdb\x1fq\xb2E\t\xec[\x06\x19\xe5\xa7\xd7\x90\x9c\x84\x0e\x8d\x84\x9a\x1e'
+    t = time.process_time()
     valid = verify_signature(hash, signature, public_key)
+    print(f'signature validation took {(time.process_time()-t)*1000}ms')
     print("signature valid:", valid)
     assert valid, "Valid signature failed"
     assert not verify_signature(hash+b'x', signature, public_key), "Invalid signature was not caught.."

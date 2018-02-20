@@ -20,6 +20,11 @@ class MessageType(IntEnum):
     BULK_PULL_BLOCKS = 9
 
 
+class BulkPullBlocksMode(IntEnum):
+    LIST_BLOCKS = 0
+    CHECKSUM_BLOCKS = 1
+
+
 class Header:
     @classmethod
     def parse(cls, data: bytes):
@@ -55,11 +60,10 @@ class Message:
     def parse(cls, header: Header, block_type: BlockType, data: bytes):
         pass
 
-    def __init__(self, header: Header, block_type: BlockType, message_type: MessageType):
+    def __init__(self, header: Header, block_type: BlockType):
         self.header = header
         self.block_type = block_type
         self.block = None
-        self.message_type = message_type
 
     async def verify(self):
         return self.header.verify()
@@ -84,7 +88,7 @@ class KeepAliveMessage(Message):
         if peers is None:
             peers = []
 
-        super(KeepAliveMessage, self).__init__(header, block_type, MessageType.KEEPALIVE)
+        super(KeepAliveMessage, self).__init__(header, block_type)
 
         self.peers = peers
 
@@ -102,7 +106,7 @@ class PublishMessage(Message):
     def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID, block: Block = None):
         if header is None:
             header = Header.default_header(MessageType.PUBLISH)
-        super(PublishMessage, self).__init__(header, block_type, MessageType.PUBLISH)
+        super(PublishMessage, self).__init__(header, block_type)
         self.block = block
 
     async def verify(self):
@@ -125,7 +129,7 @@ class ReqMessage(Message):
     def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID, block: Block = None):
         if header is None:
             header = Header.default_header(MessageType.CONFIRM_REQ)
-        super(ReqMessage, self).__init__(header, block_type, MessageType.CONFIRM_REQ)
+        super(ReqMessage, self).__init__(header, block_type)
         self.block = block
 
     async def verify(self):
@@ -154,7 +158,7 @@ class AckMessage(Message):
     def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID, vote = None, block: Block = None):
         if header is None:
             header = Header.default_header(MessageType.CONFIRM_ACK)
-        super(AckMessage, self).__init__(header, block_type, MessageType.CONFIRM_ACK)
+        super(AckMessage, self).__init__(header, block_type)
         self.vote = vote
         self.block = block
 
@@ -188,7 +192,7 @@ class FrontierReqMessage(Message):
                  account: bytes = bytes(32), age: bytes = bytes(4), count: bytes = bytes(4)):
         if header is None:
             header = Header.default_header(MessageType.FRONTIER_REQ)
-        super(FrontierReqMessage, self).__init__(header, block_type, MessageType.FRONTIER_REQ)
+        super(FrontierReqMessage, self).__init__(header, block_type)
         self.account = account
         self.age = age
         self.count = count
@@ -208,12 +212,38 @@ class BulkPullMessage(Message):
                  start: bytes = bytes(32), end: bytes = bytes(32)):
         if header is None:
             header = Header.default_header(MessageType.BULK_PULL)
-        super(BulkPullMessage, self).__init__(header, block_type, MessageType.BULK_PULL)
+        super(BulkPullMessage, self).__init__(header, block_type)
         self.start = start
         self.end = end
 
     def to_bytes(self):
         return super(BulkPullMessage, self).to_bytes() + self.start + self.end
+
+
+class BulkPullBlocksMessage(Message):
+    @classmethod
+    def parse(cls, header: Header, block_type: BlockType, data: bytes):
+        min_hash = data[0:32]
+        max_hash = data[32:64]
+        mode = BulkPullBlocksMode(data[64])
+        max_count = data[65:69]
+        return cls(header, block_type, min_hash, max_hash, mode, max_count)
+
+    def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID,
+                 min_hash: bytes = bytes(32), max_hash: bytes = bytes(32),
+                 mode: BulkPullBlocksMode = BulkPullBlocksMode.LIST_BLOCKS,
+                 max_count: bytes = bytes(4)):
+        if header is None:
+            header = Header.default_header(MessageType.BULK_PULL_BLOCKS)
+        super(BulkPullBlocksMessage, self).__init__(header, block_type)
+        self.min_hash = min_hash
+        self.max_hash = max_hash
+        self.mode = mode
+        self.max_count = max_count
+
+    def to_bytes(self):
+        return super(BulkPullBlocksMessage, self).to_bytes() + self.min_hash + self.max_hash \
+               + bytes([self.block_type.value]) + self.max_count
 
 
 class MessageParser:
@@ -235,4 +265,4 @@ class MessageParser:
         elif header.message_type == MessageType.CONFIRM_ACK:
             return AckMessage.parse(header, block_type, data[8:])
 
-        return Message(header, block_type, header.message_type)
+        return Message(header, block_type)

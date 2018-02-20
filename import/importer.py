@@ -7,6 +7,14 @@ send_db = env.open_db(b'send')
 receive_db = env.open_db(b'receive')
 open_db = env.open_db(b'open')
 change_db = env.open_db(b'change')
+blocks_info_db = env.open_db(b'blocks_info')
+
+with env.begin(db=blocks_info_db) as txn:
+    cursor = txn.cursor()
+    c = 0
+    for k, v in cursor:
+        c += 1
+    print(f'blocks_info had {c} keys')
 
 def iterate_db(txn):
     cursor = txn.cursor()
