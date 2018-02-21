@@ -1,5 +1,3 @@
-import pickle
-
 import itertools
 
 import marshal

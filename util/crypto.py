@@ -28,6 +28,11 @@ def verify_signature(hash: bytes, signature: bytes, public_key: bytes):
         return False
 
 
+def sign(hash: bytes, private_key: bytes):
+    sk = SigningKey(private_key)
+    return sk.sign(hash)
+
+
 # This task is quite slow (atm) - so executing it in a new process is good for performance
 async def verify_signature_async(hash: bytes, signature: bytes, public_key: bytes, executor: Executor = process_executor):
     _loop = asyncio.get_event_loop()

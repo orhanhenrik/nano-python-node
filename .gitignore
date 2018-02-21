@@ -2,3 +2,4 @@
 *.db
 *.ldb
 *.ldb-lock
+.pytest_cache
