@@ -2,7 +2,7 @@ import asyncio
 from enum import IntEnum
 from typing import List, Optional
 
-from models.block import Block, BlockType, BlockParser
+from models.blocks import Block, BlockType, BlockParser
 from models.peer import Peer
 from util.crypto import verify_signature_async, blake2b_async
 

@@ -11,7 +11,7 @@ import pickle
 from uvloop.loop import UDPTransport, Loop, Server
 
 from executors import process_executor, thread_executor
-from models.block import BlockType, BlockParser, Block
+from models.blocks import BlockType, BlockParser, Block
 from models.messages import (
     Message,
     MessageParser,

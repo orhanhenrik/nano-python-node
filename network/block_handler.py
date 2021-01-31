@@ -3,7 +3,7 @@ import logging
 from asyncio import Queue
 from typing import List
 
-from models.block import Block
+from models.blocks import Block
 from storage.storage import Storage
 
 

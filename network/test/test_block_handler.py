@@ -1,6 +1,6 @@
 import pytest
 
-from models.block import OpenBlock
+from models.blocks import OpenBlock
 from network.block_handler import BlockHandler
 from storage.in_memory import InMemoryStorage
 from util.crypto import sign

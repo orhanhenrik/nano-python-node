@@ -1,6 +1,6 @@
 import asyncio
 
-from models.block import OpenBlock
+from models.blocks import OpenBlock
 from util.numbers import account_to_public_key
 
 GENESIS_JSON = {

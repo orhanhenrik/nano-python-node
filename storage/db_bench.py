@@ -5,7 +5,7 @@ import rocksdb
 import time
 import lmdb
 
-from models.block import BlockParser, BlockType
+from models.blocks import BlockParser, BlockType
 
 
 def get_rocks_db():
