@@ -20,4 +20,3 @@ class InMemoryStorage(Storage):
             self.data.pop(key)
         except KeyError:
             pass
-

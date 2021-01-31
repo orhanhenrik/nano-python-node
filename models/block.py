@@ -1,8 +1,16 @@
 import asyncio
+import logging
 from enum import IntEnum
+from typing import List
 
-from util.crypto import verify_pow, verify_signature, blake2b_hash, blake2b_async, verify_pow_async, \
-    verify_signature_async
+from util.crypto import (
+    verify_pow,
+    verify_signature,
+    blake2b_hash,
+    blake2b_async,
+    verify_pow_async,
+    verify_signature_async,
+)
 
 
 class BlockType(IntEnum):
@@ -31,14 +39,15 @@ class Block:
     def hash_sync(self):
         return bytes()
 
+    def dependencies(self) -> List[bytes]:
+        return []
+
     async def hash(self):
         return bytes()
 
     async def verify(self):
         results = await asyncio.gather(
-            self.verify_signature(),
-            self.verify_pow(),
-            self.verify_consistency()
+            self.verify_signature(), self.verify_pow(), self.verify_consistency()
         )
         return all(results)
 
@@ -46,7 +55,9 @@ class Block:
         return await verify_pow_async(self.root, self.work)
 
     async def verify_signature(self):
+        logging.warning("get hash")
         _hash = await self.hash()
+        logging.warning("got hash")
         if hash and isinstance(self, OpenBlock):
             return await verify_signature_async(_hash, self.signature, self.account)
         return True
@@ -62,7 +73,7 @@ class Block:
         return bytes([self.block_type.value])
 
     def __str__(self) -> str:
-        return f'<Block {self.block_type.name}>'
+        return f"<Block {self.block_type.name}>"
 
     def __repr__(self) -> str:
         return str(self)
@@ -73,7 +84,9 @@ class SendBlock(Block):
 
     @classmethod
     def parse(cls, data: bytes):
-        assert len(data) == cls.LENGTH, f'Invalid data length! Expected: {cls.LENGTH}, actual: {len(data)}'
+        assert (
+            len(data) == cls.LENGTH
+        ), f"Invalid data length! Expected: {cls.LENGTH}, actual: {len(data)}"
         previous = data[0:32]
         destination = data[32:64]
         balance = data[64:80]
@@ -96,12 +109,21 @@ class SendBlock(Block):
     def hash_sync(self):
         return blake2b_hash(self.previous + self.destination + self.balance)
 
+    def dependencies(self) -> List[bytes]:
+        return [self.previous]
+
     async def hash(self):
         return await blake2b_async(self.previous + self.destination + self.balance)
 
     def to_bytes(self) -> bytes:
-        return super(SendBlock, self).to_bytes() + self.previous + self.destination + self.balance\
-               + self.signature + self.work
+        return (
+            super(SendBlock, self).to_bytes()
+            + self.previous
+            + self.destination
+            + self.balance
+            + self.signature
+            + self.work
+        )
 
 
 class ReceiveBlock(Block):
@@ -109,7 +131,9 @@ class ReceiveBlock(Block):
 
     @classmethod
     def parse(cls, data: bytes):
-        assert len(data) == cls.LENGTH, f'Invalid data length! Expected: {cls.LENGTH}, actual: {len(data)}'
+        assert (
+            len(data) == cls.LENGTH
+        ), f"Invalid data length! Expected: {cls.LENGTH}, actual: {len(data)}"
         previous = data[0:32]
         source = data[32:64]
         signature = data[64:128]
@@ -130,12 +154,20 @@ class ReceiveBlock(Block):
     def hash_sync(self):
         return blake2b_hash(self.previous + self.source)
 
+    def dependencies(self) -> List[bytes]:
+        return [self.previous, self.source]
+
     async def hash(self):
         return await blake2b_async(self.previous + self.source)
 
     def to_bytes(self) -> bytes:
-        return super(ReceiveBlock, self).to_bytes() + self.previous + self.source + self.signature\
-               + self.work
+        return (
+            super(ReceiveBlock, self).to_bytes()
+            + self.previous
+            + self.source
+            + self.signature
+            + self.work
+        )
 
 
 class OpenBlock(Block):
@@ -143,7 +175,9 @@ class OpenBlock(Block):
 
     @classmethod
     def parse(cls, data: bytes):
-        assert len(data) == cls.LENGTH, f'Invalid data length! Expected: {cls.LENGTH}, actual: {len(data)}'
+        assert (
+            len(data) == cls.LENGTH
+        ), f"Invalid data length! Expected: {cls.LENGTH}, actual: {len(data)}"
         source = data[0:32]
         representative = data[32:64]
         account = data[64:96]
@@ -167,12 +201,21 @@ class OpenBlock(Block):
     def hash_sync(self):
         return blake2b_hash(self.source + self.representative + self.account)
 
+    def dependencies(self) -> List[bytes]:
+        return [self.source]
+
     async def hash(self):
         return await blake2b_async(self.source + self.representative + self.account)
 
     def to_bytes(self) -> bytes:
-        return super(OpenBlock, self).to_bytes() + self.source + self.representative + self.account\
-               + self.signature + self.work
+        return (
+            super(OpenBlock, self).to_bytes()
+            + self.source
+            + self.representative
+            + self.account
+            + self.signature
+            + self.work
+        )
 
 
 class ChangeBlock(Block):
@@ -180,7 +223,9 @@ class ChangeBlock(Block):
 
     @classmethod
     def parse(cls, data: bytes):
-        assert len(data) == cls.LENGTH, f'Invalid data length! Expected: {cls.LENGTH}, actual: {len(data)}'
+        assert (
+            len(data) == cls.LENGTH
+        ), f"Invalid data length! Expected: {cls.LENGTH}, actual: {len(data)}"
         previous = data[0:32]
         representative = data[32:64]
         signature = data[64:128]
@@ -201,12 +246,20 @@ class ChangeBlock(Block):
     def hash_sync(self):
         return blake2b_hash(self.previous + self.representative)
 
+    def dependencies(self) -> List[bytes]:
+        return [self.previous]
+
     async def hash(self):
         return await blake2b_async(self.previous + self.representative)
 
     def to_bytes(self) -> bytes:
-        return super(ChangeBlock, self).to_bytes() + self.previous + self.representative\
-               + self.signature + self.work
+        return (
+            super(ChangeBlock, self).to_bytes()
+            + self.previous
+            + self.representative
+            + self.signature
+            + self.work
+        )
 
 
 class BlockParser:
@@ -237,4 +290,3 @@ class BlockParser:
             pass
 
         return Block(block_type)
-

@@ -17,12 +17,17 @@ class MessageType(IntEnum):
     BULK_PULL = 6
     BULK_PUSH = 7
     FRONTIER_REQ = 8
-    BULK_PULL_BLOCKS = 9
+    # BULK_PULL_BLOCKS = 9
+    NODE_ID_HANDSHAKE = 10
+    BULK_PULL_ACCOUNT = 11
+    TELEMETRY_REQ = 12
+    TELEMETRY_ACK = 13
 
 
-class BulkPullBlocksMode(IntEnum):
-    LIST_BLOCKS = 0
-    CHECKSUM_BLOCKS = 1
+class BulkPullAccountFlags(IntEnum):
+    PENDING_HASH_AND_AMOUNT = 0
+    PENDING_ADDRESS_ONLY = 1
+    PENDING_HASH_AMOUNT_AND_ADDRESS = 2
 
 
 class Header:
@@ -34,9 +39,13 @@ class Header:
         version_min = data[4]
         message_type = MessageType(data[5])
         extensions = data[6]
-        return cls(magic, version_max, version_current, version_min, message_type, extensions)
+        return cls(
+            magic, version_max, version_current, version_min, message_type, extensions
+        )
 
-    def __init__(self, magic, version_max, version_current, version_min, message_type, extensions):
+    def __init__(
+        self, magic, version_max, version_current, version_min, message_type, extensions
+    ):
         self.magic = magic
         self.version_max = version_max
         self.version_current = version_current
@@ -49,10 +58,18 @@ class Header:
 
     @classmethod
     def default_header(cls, message_type: MessageType):
-        return cls(b'RC', 5, 5, 1, message_type, 0)
+        return cls(b"RC", 5, 5, 1, message_type, 0)
 
     def to_bytes(self):
-        return self.magic + bytes([self.version_max, self.version_current, self.version_min, self.message_type.value, self.extensions])
+        return self.magic + bytes(
+            [
+                self.version_max,
+                self.version_current,
+                self.version_min,
+                self.message_type.value,
+                self.extensions,
+            ]
+        )
 
 
 class Message:
@@ -77,12 +94,17 @@ class KeepAliveMessage(Message):
     def parse(cls, header: Header, block_type: BlockType, data: bytes):
         peers: List[Peer] = []
         for i in range(0, len(data), 18):
-            ip = data[i:i+18]
+            ip = data[i : i + 18]
             peers.append(Peer(ip))
         # print(peers)
         return cls(header, block_type, peers)
 
-    def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID, peers: List[Peer] = None):
+    def __init__(
+        self,
+        header: Header = None,
+        block_type: BlockType = BlockType.INVALID,
+        peers: List[Peer] = None,
+    ):
         if header is None:
             header = Header.default_header(MessageType.KEEPALIVE)
         if peers is None:
@@ -103,7 +125,12 @@ class PublishMessage(Message):
         block: Block = BlockParser.parse(block_type, data)
         return cls(header, block_type, block)
 
-    def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID, block: Block = None):
+    def __init__(
+        self,
+        header: Header = None,
+        block_type: BlockType = BlockType.INVALID,
+        block: Block = None,
+    ):
         if header is None:
             header = Header.default_header(MessageType.PUBLISH)
         super(PublishMessage, self).__init__(header, block_type)
@@ -111,8 +138,7 @@ class PublishMessage(Message):
 
     async def verify(self):
         result = asyncio.gather(
-            super(PublishMessage, self).verify(),
-            self.block.verify()
+            super(PublishMessage, self).verify(), self.block.verify()
         )
         return all(result)
 
@@ -126,17 +152,19 @@ class ReqMessage(Message):
         block: Block = BlockParser.parse(block_type, data)
         return cls(header, block_type, block)
 
-    def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID, block: Block = None):
+    def __init__(
+        self,
+        header: Header = None,
+        block_type: BlockType = BlockType.INVALID,
+        block: Block = None,
+    ):
         if header is None:
             header = Header.default_header(MessageType.CONFIRM_REQ)
         super(ReqMessage, self).__init__(header, block_type)
         self.block = block
 
     async def verify(self):
-        result = asyncio.gather(
-            super(ReqMessage, self).verify(),
-            self.block.verify()
-        )
+        result = asyncio.gather(super(ReqMessage, self).verify(), self.block.verify())
         return all(result)
 
     def to_bytes(self):
@@ -147,15 +175,17 @@ class AckMessage(Message):
     @classmethod
     def parse(cls, header: Header, block_type: BlockType, data: bytes):
         # TODO: Create Vote class
-        vote = dict(
-            account=data[0:32],
-            signature=data[32:96],
-            sequence=data[96:104]
-        )
+        vote = dict(account=data[0:32], signature=data[32:96], sequence=data[96:104])
         block: Block = BlockParser.parse(block_type, data[104:])
         return cls(header, block_type, vote, block)
 
-    def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID, vote = None, block: Block = None):
+    def __init__(
+        self,
+        header: Header = None,
+        block_type: BlockType = BlockType.INVALID,
+        vote=None,
+        block: Block = None,
+    ):
         if header is None:
             header = Header.default_header(MessageType.CONFIRM_ACK)
         super(AckMessage, self).__init__(header, block_type)
@@ -163,16 +193,16 @@ class AckMessage(Message):
         self.block = block
 
     async def verify_signature(self):
-        _hash = await blake2b_async(
-            await self.block.hash() + self.vote['sequence']
+        _hash = await blake2b_async(await self.block.hash() + self.vote["sequence"])
+        return await verify_signature_async(
+            _hash, self.vote["signature"], self.vote["account"]
         )
-        return await verify_signature_async(_hash, self.vote['signature'], self.vote['account'])
 
     async def verify(self):
         results = await asyncio.gather(
             super(AckMessage, self).verify(),
             self.block.verify(),
-            self.verify_signature()
+            self.verify_signature(),
         )
         return all(results)
 
@@ -188,8 +218,14 @@ class FrontierReqMessage(Message):
         count = data[36:40]
         return cls(header, block_type, account, age, count)
 
-    def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID,
-                 account: bytes = bytes(32), age: bytes = bytes(4), count: bytes = bytes(4)):
+    def __init__(
+        self,
+        header: Header = None,
+        block_type: BlockType = BlockType.INVALID,
+        account: bytes = bytes(32),
+        age: bytes = bytes(4),
+        count: bytes = bytes(4),
+    ):
         if header is None:
             header = Header.default_header(MessageType.FRONTIER_REQ)
         super(FrontierReqMessage, self).__init__(header, block_type)
@@ -198,7 +234,12 @@ class FrontierReqMessage(Message):
         self.count = count
 
     def to_bytes(self):
-        return super(FrontierReqMessage, self).to_bytes() + self.account + self.age + self.count
+        return (
+            super(FrontierReqMessage, self).to_bytes()
+            + self.account
+            + self.age
+            + self.count
+        )
 
 
 class BulkPullMessage(Message):
@@ -208,8 +249,13 @@ class BulkPullMessage(Message):
         end = data[32:64]
         return cls(header, block_type, start, end)
 
-    def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID,
-                 start: bytes = bytes(32), end: bytes = bytes(32)):
+    def __init__(
+        self,
+        header: Header = None,
+        block_type: BlockType = BlockType.INVALID,
+        start: bytes = bytes(32),
+        end: bytes = bytes(32),
+    ):
         if header is None:
             header = Header.default_header(MessageType.BULK_PULL)
         super(BulkPullMessage, self).__init__(header, block_type)
@@ -218,32 +264,6 @@ class BulkPullMessage(Message):
 
     def to_bytes(self):
         return super(BulkPullMessage, self).to_bytes() + self.start + self.end
-
-
-class BulkPullBlocksMessage(Message):
-    @classmethod
-    def parse(cls, header: Header, block_type: BlockType, data: bytes):
-        min_hash = data[0:32]
-        max_hash = data[32:64]
-        mode = BulkPullBlocksMode(data[64])
-        max_count = data[65:69]
-        return cls(header, block_type, min_hash, max_hash, mode, max_count)
-
-    def __init__(self, header: Header = None, block_type: BlockType = BlockType.INVALID,
-                 min_hash: bytes = bytes(32), max_hash: bytes = bytes(32),
-                 mode: BulkPullBlocksMode = BulkPullBlocksMode.LIST_BLOCKS,
-                 max_count: bytes = bytes(4)):
-        if header is None:
-            header = Header.default_header(MessageType.BULK_PULL_BLOCKS)
-        super(BulkPullBlocksMessage, self).__init__(header, block_type)
-        self.min_hash = min_hash
-        self.max_hash = max_hash
-        self.mode = mode
-        self.max_count = max_count
-
-    def to_bytes(self):
-        return super(BulkPullBlocksMessage, self).to_bytes() + self.min_hash + self.max_hash \
-               + bytes([self.block_type.value]) + self.max_count
 
 
 class MessageParser:

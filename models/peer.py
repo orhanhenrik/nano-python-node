@@ -6,7 +6,7 @@ class Peer:
     def __init__(self, data):
         self.ipv6 = IPv6Address(ipaddr.Bytes(data[:16]))
         self.ipv4 = self.ipv6.ipv4_mapped
-        self.port = int.from_bytes(data[16:], byteorder='little')
+        self.port = int.from_bytes(data[16:], byteorder="little")
 
     def to_bytes(self):
         pass
@@ -15,7 +15,7 @@ class Peer:
         return str(self.ipv6), self.port
 
     def __str__(self):
-        return f'<Peer {self.ipv4 or self.ipv6}, port:{self.port}>'
+        return f"<Peer {self.ipv4 or self.ipv6}, port:{self.port}>"
 
     def __repr__(self):
         return str(self)
