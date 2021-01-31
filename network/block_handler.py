@@ -38,9 +38,9 @@ class BlockHandler:
     async def stop(self):
         await asyncio.gather(
             self.pow_queue.join(),
-            self.storage_queue.join(),
             self.signature_queue.join(),
-            # self.storage_queue.join()
+            # Storage queue is not consumed yet, so it shouldn't be joined
+            # self.storage_queue.join(),
         )
         self.pow_consumer.cancel()
         self.dep_consumer.cancel()
@@ -52,40 +52,35 @@ class BlockHandler:
     async def consume_pow_queue(self):
         while True:
             block: Block = await self.pow_queue.get()
-            logging.warning("pow start")
             valid = await block.verify_pow()
             if valid:
                 await self.dep_queue.put(block)
             else:
                 self.invalid_pow_count += 1
-            logging.warning("pow done")
             self.pow_queue.task_done()
 
     async def consume_dep_queue(self):
         while True:
             block: Block = await self.dep_queue.get()
-            logging.warning("dep start")
             deps: List[bytes] = block.dependencies()
 
-            all_exist = all(self.storage.bulk_get(deps).values())
+            all_exist = all(
+                [val is not None for val in self.storage.bulk_get(deps).values()]
+            )
 
             if all_exist:
                 await self.signature_queue.put(block)
             else:
                 pass
                 # Need to add block to a dependency registry so that it can be processed later
-            logging.warning("dep done")
             self.dep_queue.task_done()
 
     async def consume_signature_queue(self):
         while True:
             block: Block = await self.signature_queue.get()
-            logging.warning("sig start")
             valid = await block.verify_signature()
-            logging.warning(f"sig valid {valid}")
             if valid:
                 await self.storage_queue.put(block)
             else:
                 self.invalid_signature_count += 1
-            logging.warning("sig done")
             self.signature_queue.task_done()

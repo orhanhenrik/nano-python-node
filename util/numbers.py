@@ -31,14 +31,16 @@ def public_key_to_account(public_key: bytes) -> str:
         num = num >> 5
         output += account_encode(r)
 
-    output += "_brx"
+    output += "_onan"
     return output[::-1]
 
 
 def account_to_public_key(account: str) -> bytes:
-    assert account.startswith("xrb_")
+    assert account.startswith("nano_") or account.startswith("xrb_")
+
+    rest = account[5:] if account.startswith("nano_") else account[4:]
     num = 0
-    for c in account[4:]:
+    for c in rest:
         # c = ord(c)
         # assert c >= 0x30
         # assert c < 0x80

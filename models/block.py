@@ -4,8 +4,6 @@ from enum import IntEnum
 from typing import List
 
 from util.crypto import (
-    verify_pow,
-    verify_signature,
     blake2b_hash,
     blake2b_async,
     verify_pow_async,
@@ -55,9 +53,7 @@ class Block:
         return await verify_pow_async(self.root, self.work)
 
     async def verify_signature(self):
-        logging.warning("get hash")
         _hash = await self.hash()
-        logging.warning("got hash")
         if hash and isinstance(self, OpenBlock):
             return await verify_signature_async(_hash, self.signature, self.account)
         return True

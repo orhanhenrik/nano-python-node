@@ -5,6 +5,7 @@ from network.block_handler import BlockHandler
 from storage.in_memory import InMemoryStorage
 from util.crypto import sign
 from util.numbers import deterministic_key
+from storage.storage import Storage
 
 work = bytes.fromhex("591bcb21af41d3bf")[::-1]
 seed = bytes(32)
@@ -54,7 +55,6 @@ async def test_block_handler_rejects_invalid_pow(storage, open_block_without_pow
 
 
 @pytest.mark.asyncio
-@pytest.mark.skip(reason="asyncio executor not working")
 async def test_block_handler_rejects_invalid_signature(storage, open_block_without_sig):
     block_handler = BlockHandler(storage)
     storage.put(open_block_without_sig.source, b"123")
@@ -82,9 +82,13 @@ async def test_block_handler_queues_block_with_missing_dep(storage, open_block):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skip(reason="asyncio executor not working")
-async def test_block_handler_accepts_valid_pow_and_signature(storage, open_block):
+async def test_block_handler_accepts_valid_pow_and_signature(
+    storage: Storage, open_block: OpenBlock
+):
     block_handler = BlockHandler(storage)
+
+    for dep in open_block.dependencies():
+        storage.put(dep, b"")
 
     await block_handler.start()
     await block_handler.handle_block(open_block)

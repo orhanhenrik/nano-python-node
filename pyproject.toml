@@ -11,6 +11,8 @@ pytest = "^6.2.2"
 pytest-asyncio = "^0.14.0"
 uvloop = "^0.14.0"
 pure25519-blake2b = {git = "https://github.com/orhanhenrik/python-pure25519-blake2b.git"}
+mypy = "^0.800"
+pytest-watch = "^4.2.0"
 
 [tool.poetry.dev-dependencies]
 

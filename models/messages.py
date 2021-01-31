@@ -1,6 +1,6 @@
 import asyncio
 from enum import IntEnum
-from typing import List
+from typing import List, Optional
 
 from models.block import Block, BlockType, BlockParser
 from models.peer import Peer
@@ -80,7 +80,7 @@ class Message:
     def __init__(self, header: Header, block_type: BlockType):
         self.header = header
         self.block_type = block_type
-        self.block = None
+        self.block: Optional[Block] = None
 
     async def verify(self):
         return self.header.verify()
@@ -101,9 +101,9 @@ class KeepAliveMessage(Message):
 
     def __init__(
         self,
-        header: Header = None,
+        header: Optional[Header] = None,
         block_type: BlockType = BlockType.INVALID,
-        peers: List[Peer] = None,
+        peers: Optional[List[Peer]] = None,
     ):
         if header is None:
             header = Header.default_header(MessageType.KEEPALIVE)
@@ -129,7 +129,7 @@ class PublishMessage(Message):
         self,
         header: Header = None,
         block_type: BlockType = BlockType.INVALID,
-        block: Block = None,
+        block: Optional[Block] = None,
     ):
         if header is None:
             header = Header.default_header(MessageType.PUBLISH)

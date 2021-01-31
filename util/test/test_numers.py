@@ -5,10 +5,20 @@ def test_pubkey_account_conversion():
     public_key = bytes.fromhex(
         "00002C972CAB7164C44E237AD0AA4A54D110006CA22715D2DB26ED180365E4CB"
     )
-    account = "xrb_11117kdkscujem46wautt4o6no8j4118saj94qbfpbqf513pds8dqm4e4cfn"
+    account = "nano_11117kdkscujem46wautt4o6no8j4118saj94qbfpbqf513pds8dqm4e4cfn"
 
     assert public_key_to_account(public_key) == account
     assert account_to_public_key(account) == public_key
+
+
+def test_pubkey_account_conversion_xrb():
+    public_key = bytes.fromhex(
+        "00002C972CAB7164C44E237AD0AA4A54D110006CA22715D2DB26ED180365E4CB"
+    )
+    xrb_account = "xrb_11117kdkscujem46wautt4o6no8j4118saj94qbfpbqf513pds8dqm4e4cfn"
+    nano_account = "nano_11117kdkscujem46wautt4o6no8j4118saj94qbfpbqf513pds8dqm4e4cfn"
+
+    assert public_key_to_account(account_to_public_key(xrb_account)) == nano_account
 
 
 def test_deterministic_key():
