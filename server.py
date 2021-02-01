@@ -25,6 +25,8 @@ asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 EXPAND_PEERS = False
 
+peers = [("::ffff:192.168.1.136", 7075)]
+
 
 async def handle_msg(data: bytes, addr: Address, transport: UDPTransport):
     message: Message = MessageParser.parse(data)
@@ -53,18 +55,6 @@ async def handle_msg(data: bytes, addr: Address, transport: UDPTransport):
     print("done")
 
 
-class UDPServerProtocol(asyncio.DatagramProtocol):
-    def __init__(self):
-        self.transport = None
-
-    def connection_made(self, transport: UDPTransport):
-        self.transport = transport
-
-    def datagram_received(self, data: bytes, addr: Address):
-        print(f"## Received {len(data)} bytes from {addr}")
-        asyncio.ensure_future(handle_msg(data, addr, transport))
-
-
 # This server needs to respond to frontier_req and bulk_pull
 class TCPServerProtocol(asyncio.Protocol):
     def __init__(self):
@@ -79,6 +69,8 @@ class TCPServerProtocol(asyncio.Protocol):
         print("tcp data received", data)
 
 
+# Todo: this needs to fetch from a global queue. If many workers are spawned now they will all pull
+# the same frontiers.
 async def get_accounts(
     i: int,
     frontiers: List[Tuple[bytes, bytes]],
@@ -120,10 +112,8 @@ async def get_accounts(
 async def get_all_accounts(frontiers, num_workers=10):
     tasks = []
     for i in range(num_workers):
-        # TODO: Get these from a peer registry
-        host = "127.0.0.1"
-        port = 7075
-        reader, writer = await asyncio.open_connection(host, port)
+        peer = peers[0]
+        reader, writer = await asyncio.open_connection(peer[0], peer[1])
         tasks.append(get_accounts(i, frontiers, reader, writer))
     return [chain for chains in await asyncio.gather(*tasks) for chain in chains]
 
@@ -143,15 +133,19 @@ async def get_frontiers(host, port=7075):
     # than one host if we have the bandwidth for it, since knowing all frontiers and having up to
     # date blocks is important.
 
-    print("getting frontiers")
+    print("Getting frontiers")
     frontiers = await read_frontiers(reader)
+    print(f"Got {len(frontiers)} frontiers")
 
     # TODO: Need to filter frontiers. If we already have frontiers newest block, don't fetch.
     # TODO: If we have a newer block than the peer, we need to send them the update (bulk_push?)
 
-    print("getting accounts")
+    print("Getting accounts")
     chains = await get_all_accounts(frontiers)
-    print("finished getting accounts")
+    print("Finished getting accounts")
+    print(
+        f"Got {len(chains)} accounts with total of {sum(len(chain) for chain in chains)} blocks"
+    )
     writer.close()
 
     # Dump all account chains to file
@@ -231,38 +225,28 @@ async def read_bulk_pull(reader: asyncio.StreamReader):
 
 
 async def startup():
-    import socket
-
-    ipv4 = socket.gethostbyname(socket.gethostname())
-    ipv6 = f"::ffff:{ipv4}"
-
     # Send keepalive to local rai_node in order to start receiving updates from it.
-    # ipv6 = '::ffff:129.241.228.129'
     # print(f'sending keepalive to {ipv6}')
     # transport.sendto(KeepAliveMessage().to_bytes(), (ipv6, 7075, 0, 0))
 
     # Fetch frontiers and blocks from the local rai_node instance (separate service).
     # This should only be done on bootstrap in the future.
-    await get_frontiers(ipv6, 7075)
+    peer = peers[0]
+    await get_frontiers(peer[0], peer[1])
 
 
 loop = asyncio.get_event_loop()
 
 tcp_coro = loop.create_server(TCPServerProtocol, "::", 8888)
 
-udp_coro = loop.create_datagram_endpoint(UDPServerProtocol, local_addr=("::", 8888))
 
 print("starting TCP server")
 server = loop.run_until_complete(tcp_coro)
-print("starting UDP server")
-transport, protocol = loop.run_until_complete(udp_coro)
-
 asyncio.ensure_future(startup(), loop=loop)
 
 
 def shutdown(
     _loop: Loop,
-    _transport: asyncio.Transport,
     _server: Server,
     executors: List[Executor],
 ):
@@ -271,7 +255,6 @@ def shutdown(
         task.cancel()
     for executor in executors:
         executor.shutdown()
-    _transport.close()
     _server.close()
     _loop.stop()
 
@@ -280,7 +263,6 @@ loop.add_signal_handler(
     signal.SIGINT,
     shutdown,
     loop,
-    transport,
     server,
     [thread_executor, process_executor],
 )
